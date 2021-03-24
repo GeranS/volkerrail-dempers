@@ -29,7 +29,7 @@ class Damper:
 
 class Camera:
     def __init__(self):
-        with open("calibration.json", "r") as c:
+        with open("volkerrail-dempers/calibration.json", "r") as c:
             calibration_json = json.load(c)
         c.close()
 
@@ -50,6 +50,7 @@ class Camera:
 
         self.sensor = self.profile.get_device().first_depth_sensor()
         self.sensor.set_option(rs.option.visual_preset, value=1)
+        self.sensor.set_option(rs.option.motion_range, value=200)
 
         # Set colour palette to white to black
         self.colorizer = rs.colorizer(3)
@@ -75,13 +76,15 @@ class Camera:
         closest_layer = 0
         last_closest_distance = 1000
 
+        print(self.layers)
+
         i = 0
         for layer in self.layers:
-            if abs(self.layers[i] - closest_object_in_meters) < last_closest_distance:
-                last_closest_distance = abs(self.layers[i] - closest_object_in_meters)
+            if abs(self.layers[0][str(i)] - closest_object_in_meters) < last_closest_distance:
+                last_closest_distance = abs(self.layers[0][str(i)] - closest_object_in_meters)
                 closest_layer = i
 
-        distance_top_layer = self.layers[closest_layer]
+        distance_top_layer = self.layers[0][str(closest_layer)]
 
         # Set appropriate distance for layer
         self.threshold_filter.set_option(rs.option.max_distance, distance_top_layer)
@@ -99,21 +102,28 @@ class Camera:
     def find_dampers(self, image, z):
         gray = cv2.bilateralFilter(image, 11, 17, 17)
 
+        print("z is: " + str(z))
+
+        cv2.destroyAllWindows()
+
         iterations = 10
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(gray, kernel, iterations=iterations)
         kernel = np.ones((4, 4), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
 
+        cv2.destroyAllWindows()
+
         edged = cv2.Canny(dilation, 30, 200)
-        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         array_of_damper_locations = []
 
         for contour in contours:
+            cv2.drawContours(image, [contour], 0, (0, 0, 255), 2)
             area = cv2.contourArea(contour)
 
-            if area < 20000:
+            if area < 6000:
                 continue
 
             m = cv2.moments(contour)
@@ -127,9 +137,21 @@ class Camera:
 
             x, y, w, h = cv2.boundingRect(contour)
 
-            cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 1)
 
+            print("damper added")
             array_of_damper_locations.append(Damper(cX, cY, z, False))
+
+        while True:
+            cv2.imshow("image", image)
+
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
+        cv2.destroyAllWindows()
 
         dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
 
@@ -138,22 +160,26 @@ class Camera:
     def split_unsorted_array_into_row(self, dampers):
         rows = []
 
+        print("found dampers: " + str(dampers))
+
         sorted_by_y = sorted(dampers, key=lambda x:x.y, reverse=True)
 
         sorted_by_x = sorted(dampers, key=lambda x:x.x, reverse=True)
         smallest_x = sorted_by_x[0].get_x()
 
-        while len(sorted_by_y) != 0:
+        while len(sorted_by_x) != 0:
             current_row = []
+            current_row_x = sorted_by_x[0].get_x()
             while True:
-                if current_row[0].get_y() - 10 < sorted_by_y[0] < current_row[0].get_y() + 10:
-                    current_row.append(sorted_by_y[0])
-                    sorted_by_y.remove(sorted_by_y[0])
+                if len(sorted_by_x) > 0 and current_row_x - 50 < sorted_by_x[0].get_x() < current_row_x + 50:
+                    current_row.append(sorted_by_x[0])
+                    sorted_by_x.remove(sorted_by_x[0])
+                    print("this triggers")
                     continue
                 break
 
-            if len(current_row) != 8:
-                current_row = self.insert_spaces_into_row(current_row, smallest_x)
+            #if len(current_row) != 8:
+            #    current_row = self.insert_spaces_into_row(current_row, smallest_x)
 
             rows.append(current_row)
 
@@ -169,7 +195,7 @@ class Camera:
         i = 0
         counter_distance = 0
         while i < len(row):
-            if smallest_x - 10 + (counter_distance * average_distance_between_centers) < row[i] < smallest_x + 10 + (counter_distance * average_distance_between_centers):
+            if smallest_x - 10 + (counter_distance * average_distance_between_centers) < row[i].get_x() < smallest_x + 10 + (counter_distance * average_distance_between_centers):
                 new_row.append(row[i])
 
                 i += 1

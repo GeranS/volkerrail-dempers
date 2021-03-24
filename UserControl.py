@@ -6,9 +6,9 @@ import PickOrderLogic
 
 class UserInterface:
     def __init__(self):
-        cv2.namedWindow('Dempers')
-        mode_switch = '0 : MANUAL \n1 : AUTO'
-        cv2.createTrackbar(mode_switch, 'Dempers', 0, 1, mode_switch)
+        #cv2.namedWindow('Dempers')
+        #mode_switch = '0 : MANUAL \n1 : AUTO'
+        #cv2.createTrackbar(mode_switch, 'Dempers', 0, 1, self.mode_switch)
 
         # Create classes
         pick_order_logic = PickOrderLogic.PickOrderLogic()

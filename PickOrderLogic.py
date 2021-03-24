@@ -3,6 +3,7 @@ import HttpService as http
 
 import cv2
 import json
+import time
 
 
 class PickOrderLogic:
@@ -10,9 +11,9 @@ class PickOrderLogic:
         self.busy = True
 
         self.camera = cam.Camera()
-        self.http_service = http.HttpService()
+        self.http_service = http.HttpService(self)
 
-        with open("calibration.json", "r") as c:
+        with open("volkerrail-dempers/calibration.json", "r") as c:
             calibration_json = json.load(c)
         c.close()
 
@@ -25,6 +26,7 @@ class PickOrderLogic:
         self.calibration_pixel_coordinates_camera = calibration_json['calibration_pixel_coordinates_camera']
 
         # tells the robot to move to a safe position
+        time.sleep(1)
         self.http_service.send_command('SAFE')
 
     # Automatic mode automatically finds the dampers and moves them, without waiting for user input
@@ -34,28 +36,41 @@ class PickOrderLogic:
         while True:
             key = cv2.waitKey(1)
 
-            if key == ord('s') and self.busy is False:
+            # and self.busy is False
+            if key == ord('s'):
                 break
 
         # Every iteration is one layer
         while True:
             image, z = self.camera.get_top_layer_image()
-            image, array_of_dampers = self.camera.find_dampers(image, z)
+            array_of_dampers, original_image = self.camera.find_dampers(image, z)
 
-            damper_count = 1
+            image = original_image.copy()
+
             while True:
+                damper_count = 1
+
                 for row in array_of_dampers:
                     for damper in row:
                         if damper is not None:
                             if damper.get_moved():
-                                cv2.putText(image, str(damper_count) + " moved", (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                                cv2.putText(image, str(damper_count) + " moved", (damper.get_x(), damper.get_y()), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                                             (255, 0, 0))
                             else:
-                                cv2.putText(image, str(damper_count), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                                cv2.putText(image, str(damper_count), (damper.get_x(), damper.get_y()), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                                             (255, 0, 0))
                             damper_count += 1
 
                 cv2.imshow('dempers', image)
+
+                while True:
+                    key = cv2.waitKey(1)
+
+                    # and self.busy is False
+                    if key == ord('s'):
+                        break
+
+                cv2.destroyAllWindows()
                 layer_done = self.choose_next_pick(array_of_dampers)
 
                 if layer_done:
@@ -66,6 +81,9 @@ class PickOrderLogic:
 
         if damper_1 is None:
             damper_single = self.find_first_single(dampers)
+
+            if damper_single is None:
+                return True
 
             damper_single.set_moved()
 
@@ -78,12 +96,15 @@ class PickOrderLogic:
             command_string = 'DAMPER[ ]({})'.format(target_coordinates)
             self.http_service.send_command(command_string)
             return False
-        elif damper_1 and damper_2:
-            command_string = ''
+        elif damper_1 is not None and damper_2 is not None:
+            command_string = '{},{} : {},{}'.format(self.convert_pixels_to_meters(damper_1.get_x(), damper_1.get_z()),
+                                                    self.convert_pixels_to_meters(damper_1.get_y(), damper_1.get_z()),
+                                                    self.convert_pixels_to_meters(damper_2.get_x(), damper_1.get_z()),
+                                                    self.convert_pixels_to_meters(damper_2.get_y(), damper_1.get_z()))
             damper_1.set_moved()
             damper_2.set_moved()
 
-            damper_1_x, damper_1_y, damper_1_z = self.convert_to_robot_coordinates(damper_1.get_x())
+            damper_1_x, damper_1_y, damper_1_z = self.convert_to_robot_coordinates(damper_1.get_x(), damper_1.get_y(), damper_1.get_z())
 
             self.http_service.send_command(command_string)
             return False
@@ -92,11 +113,15 @@ class PickOrderLogic:
 
     def find_first_single(self, dampers):
         for row in dampers:
+            if len(row) == 1 and not row[0].get_moved():
+                return row[0]
+
+            if len(row) == 0:
+                continue
+
             i = 0
-            while i < 8:
-                if row[i] and row[i + 1] is None:
-                    return row[i]
-                elif row[i] is None and row[i + 1]:
+            while i < len(row):
+                if row[i] is not None and not row[i].get_moved():
                     return row[i + 1]
                 i += 2
 
@@ -105,12 +130,12 @@ class PickOrderLogic:
     def find_first_pair(self, dampers):
         for row in dampers:
             i = 0
-            while i < 8:
-                if row[i] and row[i + 1]:
+            while i < len(row) - 1:
+                if row[i] is not None and row[i + 1] is not None and not row[i].get_moved() and not row[i + 1].get_moved():
                     return row[i], row[i + 1]
                 i += 2
 
-        return None
+        return None, None
 
     # converts pixels at a given distance to meters
     # makes use of the calibration data
@@ -124,14 +149,13 @@ class PickOrderLogic:
 
     # converts from camera pixel coordinates to robot coordinates
     # makes use of the calibration data
-
     def convert_to_robot_coordinates(self, x, y, z):
-        calibration_coordinates_camera = (self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[0]),
-                                          self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[1]),
+        calibration_coordinates_camera = (self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[0], z),
+                                          self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[1], z),
                                           self.calibration_pixel_coordinates_camera[2])
 
-        x_meters = self.convert_pixels_to_meters(x)
-        y_meters = self.convert_pixels_to_meters(y)
+        x_meters = self.convert_pixels_to_meters(x, z)
+        y_meters = self.convert_pixels_to_meters(y, z)
 
         x_difference = calibration_coordinates_camera[0] - self.calibration_coordinates_robot[0]
         y_difference = calibration_coordinates_camera[1] - self.calibration_coordinates_robot[1]

@@ -5,9 +5,9 @@
   "calibration_coordinates_robot": [0, 0, 0],
   "calibration_pixel_coordinates_camera": [0, 0, 0],
   "layers": [
-    {"0": 0.47},
-    {"1": 0.40},
-    {"2": 0.33},
-    {"3": 0.26}
+    {"0": 0.65},
+    {"1": 0.59},
+    {"2": 0.53},
+    {"3": 0.47}
   ]
 }
