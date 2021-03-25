@@ -3,6 +3,8 @@ import numpy as np
 import pyrealsense2 as rs
 import json
 
+from ConversionService import ConversionService
+
 
 class Damper:
     def __init__(self, x, y, z, moved):
@@ -32,6 +34,8 @@ class Camera:
         with open("volkerrail-dempers/calibration.json", "r") as c:
             calibration_json = json.load(c)
         c.close()
+
+        self.conversion_service = ConversionService.get_instance()
 
         self.layers = calibration_json['layers']
 
@@ -70,7 +74,7 @@ class Camera:
 
         depth_image = np.asanyarray(depth_frame.get_data())
 
-        # Might not be reliable because of visual errors
+        # todo: Might not be reliable because of visual errors, test for reliability
         closest_object_in_meters = np.amin(depth_image) / 0.001
 
         closest_layer = 0
@@ -79,7 +83,7 @@ class Camera:
         print(self.layers)
 
         i = 0
-        for layer in self.layers:
+        for _ in self.layers:
             if abs(self.layers[0][str(i)] - closest_object_in_meters) < last_closest_distance:
                 last_closest_distance = abs(self.layers[0][str(i)] - closest_object_in_meters)
                 closest_layer = i
@@ -123,24 +127,21 @@ class Camera:
             cv2.drawContours(image, [contour], 0, (0, 0, 255), 2)
             area = cv2.contourArea(contour)
 
-            if area < 6000:
+            if area < 3000:
                 continue
 
             m = cv2.moments(contour)
 
-            x = 0
-            y = 0
-
             if m['m00'] != 0.0:
-                cX = int(m['m10'] / m['m00'])
-                cY = int(m['m01'] / m['m00'])
+                c_x = int(m['m10'] / m['m00'])
+                c_y = int(m['m01'] / m['m00'])
+
+                print("damper added")
+                array_of_damper_locations.append(Damper(c_x, c_y, z, False))
 
             x, y, w, h = cv2.boundingRect(contour)
 
             cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 1)
-
-            print("damper added")
-            array_of_damper_locations.append(Damper(cX, cY, z, False))
 
         while True:
             cv2.imshow("image", image)
@@ -160,11 +161,10 @@ class Camera:
     def split_unsorted_array_into_row(self, dampers):
         rows = []
 
-        print("found dampers: " + str(dampers))
+        # todo: is this still needed?
+        # sorted_by_y = sorted(dampers, key=lambda x: x.y, reverse=True)
 
-        sorted_by_y = sorted(dampers, key=lambda x:x.y, reverse=True)
-
-        sorted_by_x = sorted(dampers, key=lambda x:x.x, reverse=True)
+        sorted_by_x = sorted(dampers, key=lambda x: x.x, reverse=True)
         smallest_x = sorted_by_x[0].get_x()
 
         while len(sorted_by_x) != 0:
@@ -181,6 +181,8 @@ class Camera:
             #if len(current_row) != 8:
             #    current_row = self.insert_spaces_into_row(current_row, smallest_x)
 
+            current_row = sorted(current_row, key=lambda x:x.y, reverse=True)
+
             rows.append(current_row)
 
         return rows
@@ -189,17 +191,22 @@ class Camera:
     def insert_spaces_into_row(self, row, smallest_x):
         new_row = []
 
-        # todo: make it take distance from camera into account
-        average_distance_between_centers = 50
+        z = row[0].get_z()
+
+        # todo: check if it's the right distance
+        average_distance_between_centers_in_meters = 0.10
+        average_distance_between_centers = self.conversion_service \
+            .convert_meters_to_pixels(average_distance_between_centers_in_meters, z)
 
         i = 0
         counter_distance = 0
         while i < len(row):
-            if smallest_x - 10 + (counter_distance * average_distance_between_centers) < row[i].get_x() < smallest_x + 10 + (counter_distance * average_distance_between_centers):
+            if smallest_x - 10 + (counter_distance * average_distance_between_centers) < row[i].get_x() < smallest_x + \
+                    10 + (counter_distance * average_distance_between_centers):
                 new_row.append(row[i])
 
                 i += 1
-                counter_distance +=1
+                counter_distance += 1
             else:
                 new_row.append(None)
                 counter_distance += 1
