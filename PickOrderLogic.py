@@ -1,3 +1,5 @@
+import numpy as np
+
 import Camera
 import ConversionService
 import HttpService
@@ -6,17 +8,7 @@ import cv2
 import time
 
 
-def find_first_pair(dampers):
-    for row in dampers:
-        i = 0
-        while i < len(row) - 1:
-            if row[i] is not None and row[i + 1] is not None and not row[i].get_moved() and not row[i + 1].get_moved():
-                return row[i], row[i + 1]
-            i += 2
-
-    return None, None
-
-# todo: still get an array index out of range exception
+# todo: still getting an array index out of range exception
 def find_first_single(dampers):
     for row in dampers:
         if len(row) == 1 and not row[0].get_moved():
@@ -28,8 +20,8 @@ def find_first_single(dampers):
         i = 0
         while i < len(row):
             if row[i] is not None and not row[i].get_moved():
-                return row[i + 1]
-            i += 2
+                return row[i]
+            i += 1
 
     return None
 
@@ -61,10 +53,23 @@ class PickOrderLogic:
         while True:
             image, z = self.camera.get_top_layer_image()
             array_of_dampers, original_image = self.camera.find_dampers(image, z)
-
             image = original_image.copy()
 
             while True:
+                if array_of_dampers is None:
+                    cv2.putText(original_image, "No dampers found, please check pallet.", (10, 40),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 255, 50))
+                    cv2.imshow('dempers', original_image)
+
+                    while True:
+                        key = cv2.waitKey(1)
+
+                        # and self.busy is False
+                        if key == ord('s'):
+                            break
+
+                    break
+
                 damper_count = 1
 
                 for row in array_of_dampers:
@@ -96,7 +101,7 @@ class PickOrderLogic:
                     break
 
     def choose_next_pick(self, dampers):
-        damper_1, damper_2 = find_first_pair(dampers)
+        damper_1, damper_2 = self.find_first_pair(dampers)
 
         if damper_1 is None:
             damper_single = find_first_single(dampers)
@@ -135,6 +140,18 @@ class PickOrderLogic:
             return False
 
         return True
+
+    def find_first_pair(self, dampers):
+        maximum_distance_between_centers = self.conversion_service.convert_meters_to_pixels(0.2, dampers[0][0].get_z())
+        for row in dampers:
+            i = 0
+            while i < len(row) - 1:
+                if row[i] is not None and row[i + 1] is not None and not row[i].get_moved() and not row[i + 1].get_moved():
+                    if abs(row[i].get_y() - row[i + 1].get_y()) < maximum_distance_between_centers:
+                        return row[i], row[i + 1]
+                i += 2
+
+        return None, None
 
     def set_robot_done(self):
         self.busy = False

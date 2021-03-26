@@ -1,3 +1,5 @@
+import collections
+
 import cv2
 import numpy as np
 import pyrealsense2 as rs
@@ -31,13 +33,7 @@ class Damper:
 
 class Camera:
     def __init__(self):
-        with open("volkerrail-dempers/calibration.json", "r") as c:
-            calibration_json = json.load(c)
-        c.close()
-
         self.conversion_service = ConversionService.get_instance()
-
-        self.layers = calibration_json['layers']
 
         self.pipeline = rs.pipeline()
         config = rs.config()
@@ -73,22 +69,25 @@ class Camera:
         depth_frame = self.threshold_filter.process(depth_frame)
 
         depth_image = np.asanyarray(depth_frame.get_data())
+        depth_image = depth_image[40:400, 40:560]
+        depth_image = depth_image[depth_image != 0]
 
-        # todo: Might not be reliable because of visual errors, test for reliability
-        closest_object_in_meters = np.amin(depth_image) / 0.001
+        counter = collections.Counter(depth_image)
+        # todo: determine most reliable most common set size
+        most_common = counter.most_common(1000)
 
-        closest_layer = 0
-        last_closest_distance = 1000
+        print(most_common)
 
-        print(self.layers)
+        smallest_most_common = 10000000
 
-        i = 0
-        for _ in self.layers:
-            if abs(self.layers[0][str(i)] - closest_object_in_meters) < last_closest_distance:
-                last_closest_distance = abs(self.layers[0][str(i)] - closest_object_in_meters)
-                closest_layer = i
+        for m in most_common:
+            if m[0] < smallest_most_common:
+                smallest_most_common = m[0]
 
-        distance_top_layer = self.layers[0][str(closest_layer)]
+        # todo: Works for now, but requires further tuning for reliability
+        closest_object_in_meters = float(smallest_most_common) * self.sensor.get_option(rs.option.depth_units)
+        distance_top_layer = closest_object_in_meters + 0.02
+        print(distance_top_layer)
 
         # Set appropriate distance for layer
         self.threshold_filter.set_option(rs.option.max_distance, distance_top_layer)
@@ -113,12 +112,22 @@ class Camera:
         iterations = 10
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(gray, kernel, iterations=iterations)
-        kernel = np.ones((4, 4), np.uint8)
+        kernel = np.ones((5, 5), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
 
         cv2.destroyAllWindows()
 
         edged = cv2.Canny(dilation, 30, 200)
+
+        while True:
+            cv2.imshow('dempers', dilation)
+
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
         contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         array_of_damper_locations = []
@@ -132,19 +141,40 @@ class Camera:
 
             m = cv2.moments(contour)
 
+            # More accurate than the bounding box, especially for single damper pickups
             if m['m00'] != 0.0:
                 c_x = int(m['m10'] / m['m00'])
                 c_y = int(m['m01'] / m['m00'])
 
-                print("damper added")
-                array_of_damper_locations.append(Damper(c_x, c_y, z, False))
+                x, y, w, h = cv2.boundingRect(contour)
 
-            x, y, w, h = cv2.boundingRect(contour)
+                print(w/h)
 
-            cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 1)
+                if 2.1 < w/h < 2.4:
+                    # todo: this needs to be adjusted to be slightly bigger than the area of a damper at the given
+                    #  distance
+                    if area > 50000:
+                        # todo: split up a possible 3 or 4 big damper
+                        print('do this')
+
+                    print("damper added")
+                    array_of_damper_locations.append(Damper(c_x, c_y, z, False))
+                    cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 1)
+                elif 4.2 < w/h < 4.6:
+                    split_damper_1_c_x = int(c_x - (w/4))
+                    split_damper_2_c_x = int(c_x + (w/4))
+
+                    split_damper_1_x = x
+                    split_damper_2_x = int(x + (w / 2))
+
+                    cv2.rectangle(image, (split_damper_1_x, y), (split_damper_1_x + int(w/2), y + h), (255, 0, 0), 1)
+                    cv2.rectangle(image, (split_damper_2_x, y), (split_damper_2_x + int(w / 2), y + h), (255, 0, 0), 1)
+
+                    array_of_damper_locations.append(Damper(int(split_damper_1_c_x), c_y, z, False))
+                    array_of_damper_locations.append(Damper(int(split_damper_2_c_x), c_y, z, False))
 
         while True:
-            cv2.imshow("image", image)
+            cv2.imshow('dempers', image)
 
             key = cv2.waitKey(1)
 
@@ -153,6 +183,11 @@ class Camera:
                 break
 
         cv2.destroyAllWindows()
+
+        if len(array_of_damper_locations) == 0:
+            return None, image
+
+        array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
 
         dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
 
@@ -171,13 +206,14 @@ class Camera:
             current_row = []
             current_row_x = sorted_by_x[0].get_x()
             while True:
-                if len(sorted_by_x) > 0 and current_row_x - 50 < sorted_by_x[0].get_x() < current_row_x + 50:
+                if len(sorted_by_x) > 0 and current_row_x - 30 < sorted_by_x[0].get_x() < current_row_x + 30:
                     current_row.append(sorted_by_x[0])
                     sorted_by_x.remove(sorted_by_x[0])
                     print("this triggers")
                     continue
                 break
 
+            # todo: fix this
             #if len(current_row) != 8:
             #    current_row = self.insert_spaces_into_row(current_row, smallest_x)
 
@@ -193,7 +229,6 @@ class Camera:
 
         z = row[0].get_z()
 
-        # todo: check if it's the right distance
         average_distance_between_centers_in_meters = 0.10
         average_distance_between_centers = self.conversion_service \
             .convert_meters_to_pixels(average_distance_between_centers_in_meters, z)
@@ -220,3 +255,27 @@ class Camera:
             new_row.append(None)
 
         return new_row
+
+    # todo: change pixel comparisons to meter comparisons and test
+    def remove_duplicates(self, unsorted_dampers):
+        i = 0
+
+        list_without_duplicates = []
+
+        while i < len(unsorted_dampers):
+            j = i + 1
+
+            current_damper = unsorted_dampers[i]
+            is_duplicate = False
+            while j < len(unsorted_dampers):
+                possible_duplicate = unsorted_dampers[j]
+
+                if abs(current_damper.get_x() - possible_duplicate.get_x()) < 10 and abs(current_damper.get_y() - possible_duplicate.get_y()) < 10:
+                    is_duplicate = True
+
+                j += 1
+
+            if not is_duplicate:
+                list_without_duplicates.append(unsorted_dampers[i])
+
+        return list_without_duplicates
