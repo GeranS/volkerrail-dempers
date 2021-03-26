@@ -153,13 +153,35 @@ class Camera:
                 if 2.1 < w/h < 2.4:
                     # todo: this needs to be adjusted to be slightly bigger than the area of a damper at the given
                     #  distance
-                    if area > 50000:
+                    if area > 10000:
                         # todo: split up a possible 3 or 4 big damper
-                        print('do this')
+                        damper_1_2_x = x
+                        damper_3_4_x = x + int((w/2))
 
-                    print("damper added")
-                    array_of_damper_locations.append(Damper(c_x, c_y, z, False))
-                    cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 1)
+                        damper_1_3_y = y
+                        damper_2_4_y = y + int((h/2))
+
+                        array_of_damper_locations.append(Damper(damper_1_2_x, damper_1_3_y, z, False))
+                        array_of_damper_locations.append(Damper(damper_1_2_x, damper_2_4_y, z, False))
+                        array_of_damper_locations.append(Damper(damper_3_4_x, damper_1_3_y, z, False))
+                        array_of_damper_locations.append(Damper(damper_3_4_x, damper_2_4_y, z, False))
+
+                        cv2.rectangle(image, (damper_1_2_x, damper_1_3_y), (damper_1_2_x + int(w / 2), damper_1_3_y + int(h/2)),
+                                      (255, 0, 0),
+                                      1)
+                        cv2.rectangle(image, (damper_1_2_x, damper_2_4_y), (damper_1_2_x + int(w / 2), damper_2_4_y + int(h/2)),
+                                      (255, 0, 0),
+                                      1)
+                        cv2.rectangle(image, (damper_3_4_x, damper_1_3_y), (damper_3_4_x + int(w / 2), damper_1_3_y + int(h/2)),
+                                      (255, 0, 0),
+                                      1)
+                        cv2.rectangle(image, (damper_3_4_x, damper_2_4_y), (damper_3_4_x + int(w / 2), damper_2_4_y + int(h/2)),
+                                      (255, 0, 0),
+                                      1)
+                    else:
+                        print("damper added")
+                        array_of_damper_locations.append(Damper(c_x, c_y, z, False))
+                        cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 1)
                 elif 4.2 < w/h < 4.6:
                     split_damper_1_c_x = int(c_x - (w/4))
                     split_damper_2_c_x = int(c_x + (w/4))
@@ -182,12 +204,10 @@ class Camera:
             if key == ord('s'):
                 break
 
-        cv2.destroyAllWindows()
-
         if len(array_of_damper_locations) == 0:
             return None, image
 
-        array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
+        #array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
 
         dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
 

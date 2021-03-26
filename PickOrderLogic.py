@@ -141,6 +141,7 @@ class PickOrderLogic:
 
         return True
 
+    # todo: make sure the two dampers are facing towards each other, not away
     def find_first_pair(self, dampers):
         maximum_distance_between_centers = self.conversion_service.convert_meters_to_pixels(0.2, dampers[0][0].get_z())
         for row in dampers:
