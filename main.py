@@ -3,7 +3,9 @@
 # First test:    2021-03-24
 
 import UserControl
+from RailDetection import RailCamera
 
 print("Starting...")
 
-UserControl.UserInterface()
+#UserControl.UserInterface()
+RailCamera.RailCamera()
