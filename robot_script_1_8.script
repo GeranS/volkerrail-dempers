@@ -1,25 +1,78 @@
 #Created 2021-03-24
 #Urscript version 1.8
 
+def hoeknaarAA(lighoek):
+  arad = d2r(lighoek + 45) #is lighoek radialen
+  rx = cos(0.5*arad)*3.14
+  ry = sin(0.5*arad)*3.14
+  return p[0,0,0,rx,ry,0]
+end
+
 #Configuration of the python server
 port = 8000
 ip = "192.168.0.2"
 socket_name = "python_server"
 
 #Connect to python server
-socket_close = socket_open(ip, port, socket_name)
+socket = socket_open(ip, port, socket_name)
 
 #Set poses
-pose_above_belt = p[]
-pose_on_belt = p[]
-pose_safe = p[]
+pose_above_belt = pose_add(p[0.663, 0.445, 0.218, 0, 0, 0], hoeknaarAA(90))
+pose_on_belt_right = pose_add(p[0.663, 0.528, 0.143, 0, 0, 0], hoeknaarAA(90))
+pose_on_belt_left = pose_add(p[0.663, 0.396, 0.143, 0, 0, 0], hoeknaarAA(90))
+pose_safe = pose_add(p[0.663, 0.396, 0.400, 0, 0, 0], hoeknaarAA(90))
+
+def pick_up_and_move(pose_target):
+  #Moves the arm to above the target pose
+  pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
+  movej(pose_above_target)
+
+  #Moves the arm to be on top of the target dampers
+  pose_on_target = pose_add(pose_target, p[0,0,0,0,0,0])
+  movej(pose_on_target)
+
+  #Activates suction
+  set_digital_out(0, True)
+  set_digital_out(1, True)
+  sleep(1)
+  set_digital_out(2, True)
+  set_digital_out(3, True)
+
+  set_payload(6)
+
+  #Moves arm back up
+  movej(pose_above_target)
+
+  #Moves arm to above conveyor
+  movej(pose_above_belt)
+
+  #Moves arms down to conveyor left side
+  movej(pose_on_belt_left)
+  set_digital_out(0, False)
+  set_digital_out(1, False)
+
+  set_payload(3)
+
+  #Moves arms down to conveyor left side
+  movej(pose_on_belt_right)
+  set_digital_out(2, False)
+  set_digital_out(3, False)
+
+  set_payload(0)
+
+  #Moves arm to above conveyor
+  movej(pose_above_belt)
+
+  #Moves arm to safe pose
+  movej(pose_safe)
+end
 
 while (True):
   received = socket_read_string(socket_name)
   if received == "MOVE":
     #Expected format data string "?(x, y, z)"
     pose_received = socket_read_ascii_float(3, socket_name)
-    pose = p[rec[0], rec[1], rec[3], 0, 0, 0]
+    pose = p[pose_received[1], pose_received[2], pose_received[3], 0, 0, 0]
 
     pose_final = pose_add(pose, hoeknaarAA(90))
 
@@ -32,40 +85,3 @@ while (True):
   end
 end
 
-def pick_up_and_move(pose_target):
-  #Moves the arm to above the target pose
-  pose_above_target = pose_add(pose_target, [0, 0, 0.2, 0, 0, 0])
-  movej(pose_above_target)
-
-  #Moves the arm to be on top of the target dampers
-  pose_on_target = pose_add(pose_target, [0,0,0.05,0,0,0])
-  movej(pose_on_target)
-
-  #Activates suction
-  set_digital_out(1, True)
-
-  #Moves arm back up
-  movej(pose_above_target)
-
-  #Moves arm to above conveyor
-  movej(pose_above_belt)
-
-  #Moves arms down to conveyor
-  movej(pose_on_belt)
-
-  #Deactivates suction
-  set_digital_out(1, False)
-
-  #Moves arm to above conveyor
-  movej(pose_above_belt)
-
-  #Moves arm to safe pose
-  movej(pose_safe)
-end
-
-def hoeknaarAA(lighoek):
-  arad = d2r(lighoek + 45) #is lighoek radialen
-  rx = cos(0.5*arad)*3.14
-  ry = sin(0.5*arad)*3.14
-  return p[0,0,0,rx,ry,0]
-end

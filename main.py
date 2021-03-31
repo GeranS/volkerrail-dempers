@@ -7,5 +7,5 @@ from RailDetection import RailCamera
 
 print("Starting...")
 
-#UserControl.UserInterface()
-RailCamera.RailCamera()
+UserControl.UserInterface()
+#RailCamera.RailCamera()

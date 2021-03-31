@@ -69,12 +69,12 @@ class Camera:
         depth_frame = self.threshold_filter.process(depth_frame)
 
         depth_image = np.asanyarray(depth_frame.get_data())
-        depth_image = depth_image[40:400, 40:560]
+        depth_image = depth_image[80:320, 80:480]
         depth_image = depth_image[depth_image != 0]
 
         counter = collections.Counter(depth_image)
         # todo: determine most reliable most common set size
-        most_common = counter.most_common(1000)
+        most_common = counter.most_common(500)
 
         print(most_common)
 
@@ -86,7 +86,7 @@ class Camera:
 
         # todo: Works for now, but requires further tuning for reliability
         closest_object_in_meters = float(smallest_most_common) * self.sensor.get_option(rs.option.depth_units)
-        distance_top_layer = closest_object_in_meters + 0.02
+        distance_top_layer = closest_object_in_meters + 0.03
         print(distance_top_layer)
 
         # Set appropriate distance for layer
@@ -150,7 +150,7 @@ class Camera:
 
                 print(w/h)
 
-                if 2.1 < w/h < 2.4:
+                if 1.9 < w/h < 2.4:
                     # todo: this needs to be adjusted to be slightly bigger than the area of a damper at the given
                     #  distance
                     if area > 10000:

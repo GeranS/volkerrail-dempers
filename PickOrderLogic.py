@@ -28,7 +28,7 @@ def find_first_single(dampers):
 
 class PickOrderLogic:
     def __init__(self):
-        self.busy = True
+        self.busy = False
 
         self.camera = Camera.Camera()
         self.http_service = HttpService.HttpService(self)
@@ -95,12 +95,18 @@ class PickOrderLogic:
                         break
 
                 cv2.destroyAllWindows()
+                while self.busy:
+                    time.sleep(0.5)
+                    self.busy = True
                 layer_done = self.choose_next_pick(array_of_dampers)
 
                 if layer_done:
                     break
 
     def choose_next_pick(self, dampers):
+        while self.busy:
+            time.sleep(0.5)
+
         damper_1, damper_2 = self.find_first_pair(dampers)
 
         if damper_1 is None:
@@ -116,7 +122,7 @@ class PickOrderLogic:
                                                                                                 damper_single.get_z())
 
             # offset because it's a single damper
-            target_y = target_y - 0.05
+            target_x = target_x - 0.05
 
             self.http_service.send_move_command(target_x, target_y, target_z)
             return False
