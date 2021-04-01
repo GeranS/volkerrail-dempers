@@ -59,6 +59,8 @@ class Camera:
         self.colorizer.set_option(rs.option.max_distance, 0.1)
         self.colorizer.set_option(rs.option.histogram_equalization_enabled, False)
 
+    # todo: split z coordinate into a detection z and a damper z from a hardcoded table of distances
+    # todo: make detection z more reliable, currently it fails too often by setting the distance too close
     def get_top_layer_image(self):
         frames = self.pipeline.wait_for_frames()
 
@@ -73,7 +75,7 @@ class Camera:
         depth_image = depth_image[depth_image != 0]
 
         counter = collections.Counter(depth_image)
-        # todo: determine most reliable most common set size
+        # todo: determine most reliable most common set size, the more dampers there are the smaller it can be
         most_common = counter.most_common(500)
 
         print(most_common)
@@ -142,6 +144,7 @@ class Camera:
             m = cv2.moments(contour)
 
             # More accurate than the bounding box, especially for single damper pickups
+            # todo: this whole thing needs to be cleaned up to more readable, perhaps split up into different functions
             if m['m00'] != 0.0:
                 c_x = int(m['m10'] / m['m00'])
                 c_y = int(m['m01'] / m['m00'])
@@ -152,7 +155,7 @@ class Camera:
 
                 if 1.9 < w/h < 2.4:
                     # todo: this needs to be adjusted to be slightly bigger than the area of a damper at the given
-                    #  distance
+                    #  distance instead of a fixed pixel area
                     if area > 10000:
                         # todo: split up a possible 3 or 4 big damper
                         damper_1_2_x = x
@@ -244,6 +247,7 @@ class Camera:
         return rows
 
     # Inserts None into spaces where there should be a damper but isn't
+    # todo: fix this
     def insert_spaces_into_row(self, row, smallest_x):
         new_row = []
 
