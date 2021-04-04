@@ -29,10 +29,16 @@ def find_paste(image):
         cv2.drawContours(output_image, [contour], 0, (0, 0, 255), 2)
 
         x, y, w, h = cv2.boundingRect(contour)
+        centre_x = int(x + (w / 2))
+        centre_y = int(y + (h / 2))
 
         cv2.rectangle(output_image, (x, y), (x + w, y + h), (255, 0, 0), 5)
-        cv2.circle(output_image, (int(x + (w / 2)), int(y + (h / 2))), 5, (255, 0, 0), 5)
+        cv2.circle(output_image, (centre_x, centre_y), 5, (255, 0, 0), 5)
 
+        perimeter = cv2.arcLength(contour, True)
+
+        print("Perimeter: {}".format(perimeter))
+        print("Coordinates are ({};{})".format(centre_x, centre_y))
     return output_image
 
 
@@ -41,9 +47,13 @@ class RailCamera:
         # todo: determine what kind of camera to use and do the setup here, likely to just be a normal camera but
         #  we're not sure yet
         print("Initialising rail camera.")
+        user_input = input("Photo (p) or camera (c)")
+        if user_input == 'c':
+            self.cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+            ret, self.frame = self.cap.read()
+        elif user_input == 'p':
+            self.frame = cv2.imread(r'C:\Users\smr.hhs.laptop\Downloads\Pasta 2.jpg')
 
-        self.cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
-        ret, self.frame = self.cap.read()
         self.frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
 
 
