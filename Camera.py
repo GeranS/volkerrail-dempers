@@ -3,7 +3,6 @@ import collections
 import cv2
 import numpy as np
 import pyrealsense2 as rs
-import json
 
 from ConversionService import ConversionService
 
@@ -71,7 +70,7 @@ class Camera:
         depth_frame = self.threshold_filter.process(depth_frame)
 
         depth_image = np.asanyarray(depth_frame.get_data())
-        depth_image = depth_image[80:320, 80:480]
+        depth_image = depth_image[80:400, 80:560]
         depth_image = depth_image[depth_image != 0]
 
         counter = collections.Counter(depth_image)
@@ -88,11 +87,11 @@ class Camera:
 
         # todo: Works for now, but requires further tuning for reliability
         closest_object_in_meters = float(smallest_most_common) * self.sensor.get_option(rs.option.depth_units)
-        distance_top_layer = closest_object_in_meters + 0.03
-        print(distance_top_layer)
+        detection_z = closest_object_in_meters + 0.03
+        print(detection_z)
 
         # Set appropriate distance for layer
-        self.threshold_filter.set_option(rs.option.max_distance, distance_top_layer)
+        self.threshold_filter.set_option(rs.option.max_distance, detection_z)
 
         frames = self.pipeline.wait_for_frames()
 
@@ -101,23 +100,22 @@ class Camera:
 
         depth_colormap = np.asanyarray(self.colorizer.colorize(depth_frame).get_data())
 
-        return depth_colormap, distance_top_layer
+        layer_z = self.conversion_service.get_layer_z(detection_z)
+
+        return depth_colormap, detection_z, layer_z
 
     # Finds the dampers in the provided white to black image
-    def find_dampers(self, image, z):
+    def find_dampers(self, image, detection_z, layer_z):
         gray = cv2.bilateralFilter(image, 11, 17, 17)
 
-        print("z is: " + str(z))
-
-        cv2.destroyAllWindows()
+        print("detection z: " + str(detection_z))
+        print("layer z: " + str(layer_z))
 
         iterations = 10
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(gray, kernel, iterations=iterations)
         kernel = np.ones((5, 5), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
-
-        cv2.destroyAllWindows()
 
         edged = cv2.Canny(dilation, 30, 200)
 
@@ -151,52 +149,69 @@ class Camera:
 
                 x, y, w, h = cv2.boundingRect(contour)
 
-                print(w/h)
+                min_length_damper = 0.12
+                max_length_damper = 0.16
 
-                if 1.9 < w/h < 2.4:
-                    # todo: this needs to be adjusted to be slightly bigger than the area of a damper at the given
-                    #  distance instead of a fixed pixel area
-                    if area > 10000:
-                        # todo: split up a possible 3 or 4 big damper
-                        damper_1_2_x = x
-                        damper_3_4_x = x + int((w/2))
+                min_width_damper = 0.04
+                max_width_damper = 0.06
 
-                        damper_1_3_y = y
-                        damper_2_4_y = y + int((h/2))
+                h_meters = self.conversion_service.convert_pixels_to_meters(h, detection_z)
+                w_meters = self.conversion_service.convert_pixels_to_meters(w, detection_z)
 
-                        array_of_damper_locations.append(Damper(damper_1_2_x, damper_1_3_y, z, False))
-                        array_of_damper_locations.append(Damper(damper_1_2_x, damper_2_4_y, z, False))
-                        array_of_damper_locations.append(Damper(damper_3_4_x, damper_1_3_y, z, False))
-                        array_of_damper_locations.append(Damper(damper_3_4_x, damper_2_4_y, z, False))
+                minimum_area_damper = self.conversion_service.convert_meters_to_pixels(min_length_damper, detection_z) \
+                                      * self.conversion_service.convert_meters_to_pixels(min_width_damper, detection_z)
 
-                        cv2.rectangle(image, (damper_1_2_x, damper_1_3_y), (damper_1_2_x + int(w / 2), damper_1_3_y + int(h/2)),
-                                      (255, 0, 0),
-                                      1)
-                        cv2.rectangle(image, (damper_1_2_x, damper_2_4_y), (damper_1_2_x + int(w / 2), damper_2_4_y + int(h/2)),
-                                      (255, 0, 0),
-                                      1)
-                        cv2.rectangle(image, (damper_3_4_x, damper_1_3_y), (damper_3_4_x + int(w / 2), damper_1_3_y + int(h/2)),
-                                      (255, 0, 0),
-                                      1)
-                        cv2.rectangle(image, (damper_3_4_x, damper_2_4_y), (damper_3_4_x + int(w / 2), damper_2_4_y + int(h/2)),
-                                      (255, 0, 0),
-                                      1)
-                    else:
-                        print("damper added")
-                        array_of_damper_locations.append(Damper(c_x, c_y, z, False))
-                        cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 1)
-                elif 4.2 < w/h < 4.6:
-                    split_damper_1_c_x = int(c_x - (w/4))
-                    split_damper_2_c_x = int(c_x + (w/4))
+                maximum_area_damper = self.conversion_service.convert_meters_to_pixels(max_length_damper, detection_z) \
+                                      * self.conversion_service.convert_meters_to_pixels(max_width_damper, detection_z)
 
-                    split_damper_1_x = x
-                    split_damper_2_x = int(x + (w / 2))
+                maximum_amount_lengthwise = h_meters // min_length_damper
+                minimum_amount_lengthwise = h_meters // max_length_damper
 
-                    cv2.rectangle(image, (split_damper_1_x, y), (split_damper_1_x + int(w/2), y + h), (255, 0, 0), 1)
-                    cv2.rectangle(image, (split_damper_2_x, y), (split_damper_2_x + int(w / 2), y + h), (255, 0, 0), 1)
+                maximum_amount_widthwise = w_meters // min_width_damper
+                minimum_amount_widthwise = w_meters // max_width_damper
 
-                    array_of_damper_locations.append(Damper(int(split_damper_1_c_x), c_y, z, False))
-                    array_of_damper_locations.append(Damper(int(split_damper_2_c_x), c_y, z, False))
+                # todo: take into account the max one
+                amount_wide = minimum_amount_widthwise
+                amount_long = minimum_amount_lengthwise
+
+                # total_amount_of_dampers_from_dimensions = amount_long * amount_wide
+                # minimum_amount_of_dampers_from_area = area // maximum_area_damper
+                # maximum_amount_of_dampers_from_area = area // minimum_area_damper
+
+                if amount_wide == 1 and amount_long == 1:
+                    array_of_damper_locations.append(Damper(c_x, c_y, layer_z, False))
+                    # todo: draw damper here
+                else:
+                    pixels_height_per_damper = h / amount_long
+                    half_height = pixels_height_per_damper / 2
+
+                    pixels_width_per_damper = w / amount_wide
+                    half_width = pixels_width_per_damper / 2
+
+                    width_counter = 0
+                    while width_counter < amount_wide:
+                        length_counter = 0
+                        while length_counter < amount_long:
+                            current_damper_x = x + half_width + (width_counter * pixels_width_per_damper)
+                            current_damper_y = y + half_height + (length_counter * pixels_height_per_damper)
+
+                            crop_to_check_if_damper_exists = dilation.copy()[current_damper_y - 2: current_damper_y + 2,
+                                                             current_damper_x - 2: current_damper_x + 2]
+
+                            # Checks if there's actually a damper at the suspected location
+                            if cv2.countNonZero(crop_to_check_if_damper_exists) != 0:
+                                bounding_rectangle_x = x + (width_counter * pixels_width_per_damper)
+                                bounding_rectangle_y = y + (width_counter * pixels_height_per_damper)
+
+                                cv2.rectangle(image, (bounding_rectangle_x, bounding_rectangle_y), (bounding_rectangle_x
+                                            + pixels_width_per_damper, bounding_rectangle_y, pixels_height_per_damper),
+                                              (255, 0, 0), 2)
+
+                                array_of_damper_locations.append(
+                                    Damper(current_damper_x, current_damper_y, layer_z, False))
+
+                            length_counter += 1
+                        width_counter += 1
 
         while True:
             cv2.imshow('dempers', image)
@@ -210,7 +225,7 @@ class Camera:
         if len(array_of_damper_locations) == 0:
             return None, image
 
-        #array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
+        # array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
 
         dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
 
@@ -237,10 +252,10 @@ class Camera:
                 break
 
             # todo: fix this
-            #if len(current_row) != 8:
+            # if len(current_row) != 8:
             #    current_row = self.insert_spaces_into_row(current_row, smallest_x)
 
-            current_row = sorted(current_row, key=lambda x:x.y, reverse=True)
+            current_row = sorted(current_row, key=lambda x: x.y, reverse=True)
 
             rows.append(current_row)
 
@@ -294,7 +309,8 @@ class Camera:
             while j < len(unsorted_dampers):
                 possible_duplicate = unsorted_dampers[j]
 
-                if abs(current_damper.get_x() - possible_duplicate.get_x()) < 10 and abs(current_damper.get_y() - possible_duplicate.get_y()) < 10:
+                if abs(current_damper.get_x() - possible_duplicate.get_x()) < 10 and abs(
+                        current_damper.get_y() - possible_duplicate.get_y()) < 10:
                     is_duplicate = True
 
                 j += 1

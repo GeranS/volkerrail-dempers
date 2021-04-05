@@ -33,6 +33,8 @@ class ConversionService:
             self.x_inversion = calibration_json['x_inversion']
             self.y_inversion = calibration_json['y_inversion']
 
+            self.layer_heights = calibration_json['layer_heights']
+
     # converts pixels at a given distance to meters
     # makes use of the calibration data
     # todo: check if pixel to meter conversion is different near edges of the view
@@ -74,3 +76,14 @@ class ConversionService:
         new_y = y_meters - y_difference
 
         return new_x, new_y, new_z
+
+    def get_layer_z(self, detection_z):
+        best_layer_height = 0
+        difference = 100
+
+        for layer in self.layer_heights:
+            if abs(detection_z - layer) < difference:
+                best_layer_height = layer
+                difference = abs(detection_z - layer)
+
+        return best_layer_height

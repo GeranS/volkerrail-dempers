@@ -51,8 +51,8 @@ class PickOrderLogic:
 
         # Every iteration is one layer
         while True:
-            image, z = self.camera.get_top_layer_image()
-            array_of_dampers, original_image = self.camera.find_dampers(image, z)
+            image, detection_z, layer_z = self.camera.get_top_layer_image()
+            array_of_dampers, original_image = self.camera.find_dampers(image, detection_z, layer_z)
             image = original_image.copy()
 
             while True:

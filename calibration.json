@@ -6,5 +6,6 @@
   "calibration_pixel_coordinates_camera": [333, 193, 0.690],
   "x_inversion": false,
   "y_inversion": false,
-  "quarter_turn": false
+  "quarter_turn": false,
+  "layer_heights": [0.063, 0.09, 0.12]
 }
