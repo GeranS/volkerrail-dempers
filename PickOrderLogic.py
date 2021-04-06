@@ -52,6 +52,8 @@ class PickOrderLogic:
         # Every iteration is one layer
         while True:
             image, detection_z, layer_z = self.camera.get_top_layer_image()
+            # todo: remove slats before continuing
+            slats = self.camera.find_slats(image, detection_z)
             array_of_dampers, original_image = self.camera.find_dampers(image, detection_z, layer_z)
             image = original_image.copy()
 

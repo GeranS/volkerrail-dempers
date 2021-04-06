@@ -107,8 +107,7 @@ class Camera:
     # Finds the dampers in the provided white to black image
     def find_dampers(self, image, detection_z, layer_z):
         original_image = image.copy()
-        gray = cv2.bilateralFilter(image, 11, 17, 17)
-
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         print("detection z: " + str(detection_z))
         print("layer z: " + str(layer_z))
 
@@ -121,7 +120,8 @@ class Camera:
         edged = cv2.Canny(dilation, 30, 200)
 
         while True:
-            cv2.imshow('dempers', dilation)
+            cv2.imshow('dempers', original_image)
+            cv2.imshow('dempers2', dilation)
 
             key = cv2.waitKey(1)
 
@@ -131,10 +131,21 @@ class Camera:
 
         contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        cv2.drawContours(original_image, contours, -1, (0, 0, 255), 2)
+
+        while True:
+            cv2.imshow('dempers', original_image)
+
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
         array_of_damper_locations = []
 
         for contour in contours:
-            cv2.drawContours(image, [contour], 0, (0, 0, 255), 2)
+            #cv2.drawContours(image, [contour], 0, (0, 0, 255), 2)
             area = cv2.contourArea(contour)
 
             if area < 3000:
@@ -150,17 +161,22 @@ class Camera:
 
                 x, y, w, h = cv2.boundingRect(contour)
 
-                min_length_damper = 0.12
-                max_length_damper = 0.16
+                cv2.rectangle(image, (x, y), (x +w, y +h), (0,255,0), 2)
 
-                min_width_damper = 0.04
-                max_width_damper = 0.06
+                min_length_damper = 0.05
+                max_length_damper = 0.06
+
+                min_width_damper = 0.12
+                max_width_damper = 0.16
 
                 h_meters = self.conversion_service.convert_pixels_to_meters(h, detection_z)
                 w_meters = self.conversion_service.convert_pixels_to_meters(w, detection_z)
 
                 minimum_area_damper = self.conversion_service.convert_meters_to_pixels(min_length_damper, detection_z) \
                                       * self.conversion_service.convert_meters_to_pixels(min_width_damper, detection_z)
+
+                if area < minimum_area_damper or h_meters < min_length_damper or w_meters < min_width_damper:
+                    continue
 
                 maximum_area_damper = self.conversion_service.convert_meters_to_pixels(max_length_damper, detection_z) \
                                       * self.conversion_service.convert_meters_to_pixels(max_width_damper, detection_z)
@@ -172,49 +188,39 @@ class Camera:
                 minimum_amount_widthwise = w_meters // max_width_damper
 
                 # todo: take into account the max one
-                amount_wide = minimum_amount_widthwise
-                amount_long = minimum_amount_lengthwise
-
-                # total_amount_of_dampers_from_dimensions = amount_long * amount_wide
-                # minimum_amount_of_dampers_from_area = area // maximum_area_damper
-                # maximum_amount_of_dampers_from_area = area // minimum_area_damper
+                amount_wide = maximum_amount_widthwise
+                amount_long = maximum_amount_lengthwise
 
                 if amount_wide == 1 and amount_long == 1:
                     array_of_damper_locations.append(Damper(c_x, c_y, layer_z, False))
                     # todo: draw damper here
                 else:
-                    pixels_height_per_damper = h / amount_long
-                    half_height = pixels_height_per_damper / 2
+                    pxl_h_damper = int(h / amount_long)
+                    half_height = pxl_h_damper / 2
 
-                    pixels_width_per_damper = w / amount_wide
-                    half_width = pixels_width_per_damper / 2
+                    pxl_w_damper = int(w / amount_wide)
+                    half_width = pxl_w_damper / 2
 
-                    width_counter = 0
-                    while width_counter < amount_wide:
-                        length_counter = 0
-                        while length_counter < amount_long:
-                            current_damper_x = x + half_width + (width_counter * pixels_width_per_damper)
-                            current_damper_y = y + half_height + (length_counter * pixels_height_per_damper)
+                    length_counter = 0
+                    while length_counter < amount_long:
+                        width_counter = 0
+                        while width_counter < amount_wide:
+                            current_damper_x = int(x + half_width + (width_counter * pxl_w_damper))
+                            current_damper_y = int(y + half_height + (length_counter * pxl_h_damper))
 
                             crop_to_check_if_damper_exists = dilation.copy()[current_damper_y - 2: current_damper_y + 2,
                                                              current_damper_x - 2: current_damper_x + 2]
 
                             # Checks if there's actually a damper at the suspected location
                             if cv2.countNonZero(crop_to_check_if_damper_exists) != 0:
-                                bounding_rectangle_x = x + (width_counter * pixels_width_per_damper)
-                                bounding_rectangle_y = y + (width_counter * pixels_height_per_damper)
+                                bnd_rect_x = int(x + (width_counter * pxl_w_damper))
+                                bnd_rect_y = int(y + (length_counter * pxl_h_damper))
+                                cv2.rectangle(image, (bnd_rect_x, bnd_rect_y), (bnd_rect_x + pxl_w_damper, bnd_rect_y + pxl_h_damper), (255,0,0), 2)
 
-                                cv2.rectangle(image, (bounding_rectangle_x, bounding_rectangle_y), (bounding_rectangle_x
-                                                                                                    + pixels_width_per_damper,
-                                                                                                    bounding_rectangle_y,
-                                                                                                    pixels_height_per_damper),
-                                              (255, 0, 0), 2)
+                                array_of_damper_locations.append(Damper(current_damper_x, current_damper_y, layer_z, False))
 
-                                array_of_damper_locations.append(
-                                    Damper(current_damper_x, current_damper_y, layer_z, False))
-
-                            length_counter += 1
-                        width_counter += 1
+                            width_counter += 1
+                        length_counter += 1
 
         while True:
             cv2.imshow('dempers', image)
@@ -234,20 +240,90 @@ class Camera:
 
         return dampers_sorted, image
 
-    def find_slats(self, image, detection_z, top_left_coordinates, bottom_right_coordinates):
-        x1, y1 = top_left_coordinates
-        x2, y2 = bottom_right_coordinates
-        cropped_image = image.copy()[y1: y2, x1: x2]
+    def find_slats(self, image, detection_z):
+        image_middle = image[120:360, 120: 520]
 
-        iterations = 5
-        kernel = np.ones((3, 3), np.uint8)
-        erosion = cv2.erode(cropped_image, kernel, iterations=iterations)
+        big_kernel = np.ones((8,8), np.uint8)
+        image_middle = cv2.dilate(image_middle, big_kernel, iterations=1)
+
+        image[120:360, 120: 520] = image_middle
+
+        while True:
+            cv2.imshow('dempers', image)
+
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
+        iterations = 10
+        kernel = np.ones((5, 5), np.uint8)
+        erosion = cv2.erode(image, kernel, iterations=iterations)
         kernel = np.ones((3, 3), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
 
-        inverted_cropped = cv2.bitwise_not(dilation)
+        while True:
+            cv2.imshow('dempers', dilation)
 
-        edged = cv2.Canny(inverted_cropped, 30, 200)
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
+        edged = cv2.Canny(dilation, 30, 200)
+
+        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        x1, x2, y1, y2 = None, None, None, None
+
+        for contour in contours:
+            area = cv2.contourArea(contour)
+
+            #todo: change to be dependant on detection_z
+            if area < 10000:
+                continue
+
+            x, y, w, h = cv2.boundingRect(contour)
+
+            rotated_rect = cv2.minAreaRect(contour)
+            box = cv2.boxPoints(rotated_rect)  # cv2.boxPoints(rect) for OpenCV 3.x
+            box = np.int0(box)
+            cv2.drawContours(dilation, [box], 0, (255, 255, 255), 25)
+
+            x1 = x
+            x2 = x + w
+            y1 = y
+            y2 = y + h
+
+        while True:
+            cv2.imshow('dempers', dilation)
+
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
+        blank_image = np.zeros(shape=[480, 640, 3], dtype=np.uint8)
+
+        blank_image[y1: y2, x1: x2] = cv2.bitwise_not(dilation[y1: y2, x1: x2])
+
+        inverted = blank_image
+
+        while True:
+            cv2.imshow('dempers', inverted)
+
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
+        # todo: anything past this line may or may not no longer be relevant
+
+        #edged = cv2.Canny(inverted_cropped, 30, 200)
 
         contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 

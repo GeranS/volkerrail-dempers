@@ -19,10 +19,10 @@ class HttpService:
         server_socket.listen(2)
 
         print("Waiting for robot to connect...")
-        conn, _ = server_socket.accept()
-        self.client = conn
+        #conn, _ = server_socket.accept()
+        #self.client = conn
 
-        _thread.start_new_thread(self.listen_for_response, ())
+        #_thread.start_new_thread(self.listen_for_response, ())
 
     def send_move_command(self, robot_x, robot_y, robot_z):
         message_string = 'MOVE'
@@ -42,7 +42,7 @@ class HttpService:
     def send_command(self, message_string):
         # self.client.send(message_string)
         print('http message: ' + message_string)
-        self.client.send(message_string.encode())
+        #self.client.send(message_string.encode())
         return message_string
 
     # todo: second listener for communication with PLC
