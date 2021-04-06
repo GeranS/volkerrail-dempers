@@ -106,6 +106,7 @@ class Camera:
 
     # Finds the dampers in the provided white to black image
     def find_dampers(self, image, detection_z, layer_z):
+        original_image = image.copy()
         gray = cv2.bilateralFilter(image, 11, 17, 17)
 
         print("detection z: " + str(detection_z))
@@ -204,7 +205,9 @@ class Camera:
                                 bounding_rectangle_y = y + (width_counter * pixels_height_per_damper)
 
                                 cv2.rectangle(image, (bounding_rectangle_x, bounding_rectangle_y), (bounding_rectangle_x
-                                            + pixels_width_per_damper, bounding_rectangle_y, pixels_height_per_damper),
+                                                                                                    + pixels_width_per_damper,
+                                                                                                    bounding_rectangle_y,
+                                                                                                    pixels_height_per_damper),
                                               (255, 0, 0), 2)
 
                                 array_of_damper_locations.append(
@@ -230,6 +233,53 @@ class Camera:
         dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
 
         return dampers_sorted, image
+
+    def find_slats(self, image, detection_z, top_left_coordinates, bottom_right_coordinates):
+        x1, y1 = top_left_coordinates
+        x2, y2 = bottom_right_coordinates
+        cropped_image = image.copy()[y1: y2, x1: x2]
+
+        iterations = 5
+        kernel = np.ones((3, 3), np.uint8)
+        erosion = cv2.erode(cropped_image, kernel, iterations=iterations)
+        kernel = np.ones((3, 3), np.uint8)
+        dilation = cv2.dilate(erosion, kernel, iterations=iterations)
+
+        inverted_cropped = cv2.bitwise_not(dilation)
+
+        edged = cv2.Canny(inverted_cropped, 30, 200)
+
+        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        possible_slats = [[(0, 0)]]
+        slats = []
+
+        two_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.02, detection_z)
+
+        # Finding the empty spaces between the dampers and slats
+        for contour in contours:
+            x, y, w, _ = cv2.boundingRect(contour)
+
+            y = y - two_centimeters_in_pixels
+            x = x + int(w/2)
+
+            for possible in possible_slats:
+                if abs(y - possible[0][1]) > 5:
+                    possible_slats.append([(x, y)])
+                else:
+                    possible.append((x, y))
+
+        for possible_slat in possible_slats:
+            sorted_possible_slat = sorted(possible_slat, key=lambda ps: ps[0])
+            leftmost_coord = sorted_possible_slat[0]
+            rightmost_coord = sorted_possible_slat[len(sorted_possible_slat) - 1]
+
+            average_x = (leftmost_coord[0] + rightmost_coord[0]) / 2
+            average_y = (leftmost_coord[1] + rightmost_coord[1]) / 2
+
+            slats.append((average_x, average_y))
+
+        return slats
 
     def split_unsorted_array_into_row(self, dampers):
         rows = []
