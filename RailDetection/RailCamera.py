@@ -59,10 +59,11 @@ class RailCamera:
 
 if __name__ == "__main__":
     RC = RailCamera()
-    output_image = find_paste(RC.frame)
+    #output_image = find_paste(RC.frame)
 
     while True:
-        cv2.imshow('rail', output_image)
+        ret, RC.frame = RC.cap.read()
+        cv2.imshow('rail', RC.frame)
 
         key = cv2.waitKey(1)
 
