@@ -122,7 +122,8 @@ class PickOrderLogic:
                                                                                                 damper_single.get_z())
 
             # offset because it's a single damper
-            target_x = target_x - 0.05
+            # todo: check offset
+            target_y = target_y - 0.05
 
             self.http_service.send_move_command(target_x, target_y, target_z)
             return False

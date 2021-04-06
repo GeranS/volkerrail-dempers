@@ -31,10 +31,11 @@ class ConversionService:
             self.quarter_turn = calibration_json['quarter_turn']
 
             self.x_inversion = calibration_json['x_inversion']
-            self
+            self.y_inversion = calibration_json['y_inversion']
 
     # converts pixels at a given distance to meters
     # makes use of the calibration data
+    # todo: check if pixel to meter conversion is different near edges of the view
     def convert_pixels_to_meters(self, pixels, z):
         meters_per_pixel = self.calibration_object_length_in_meters / self.calibration_object_length_in_pixels
         relative_distance_difference = z / self.calibration_object_distance_in_meters
@@ -53,6 +54,7 @@ class ConversionService:
 
     # converts from camera pixel coordinates to robot coordinates
     # makes use of the calibration data
+    # todo: implement quarter turn, x inversion, and y inversion from calibration.json
     def convert_to_robot_coordinates(self, x, y, z):
         calibration_coordinates_camera = (
             self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[0], z),

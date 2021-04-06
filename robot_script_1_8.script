@@ -32,13 +32,11 @@ def pick_up_and_move(pose_target):
   movej(pose_on_target)
 
   #Activates suction
+  set_payload(6, [0,0,-0.1])
   set_digital_out(0, True)
   set_digital_out(1, True)
-  sleep(1)
   set_digital_out(2, True)
   set_digital_out(3, True)
-
-  set_payload(6)
 
   #Moves arm back up
   movej(pose_above_target)
@@ -50,8 +48,6 @@ def pick_up_and_move(pose_target):
   movej(pose_on_belt_left)
   set_digital_out(0, False)
   set_digital_out(1, False)
-
-  set_payload(3)
 
   #Moves arms down to conveyor left side
   movej(pose_on_belt_right)
