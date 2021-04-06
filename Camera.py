@@ -145,7 +145,6 @@ class Camera:
         array_of_damper_locations = []
 
         for contour in contours:
-            #cv2.drawContours(image, [contour], 0, (0, 0, 255), 2)
             area = cv2.contourArea(contour)
 
             if area < 3000:
@@ -187,13 +186,13 @@ class Camera:
                 maximum_amount_widthwise = w_meters // min_width_damper
                 minimum_amount_widthwise = w_meters // max_width_damper
 
-                # todo: take into account the max one
+                # todo: take into account both min and max
                 amount_wide = maximum_amount_widthwise
                 amount_long = maximum_amount_lengthwise
 
                 if amount_wide == 1 and amount_long == 1:
                     array_of_damper_locations.append(Damper(c_x, c_y, layer_z, False))
-                    # todo: draw damper here
+                    cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 2)
                 else:
                     pxl_h_damper = int(h / amount_long)
                     half_height = pxl_h_damper / 2
