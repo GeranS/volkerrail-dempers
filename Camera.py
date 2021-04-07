@@ -119,47 +119,29 @@ class Camera:
 
         edged = cv2.Canny(dilation, 30, 200)
 
-        while True:
-            cv2.imshow('dempers', dilation)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
-
         contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         cv2.drawContours(original_image, contours, -1, (0, 0, 255), 2)
-
-        while True:
-            cv2.imshow('dempers', original_image)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
 
         array_of_damper_locations = []
 
         for contour in contours:
             area = cv2.contourArea(contour)
 
+            # todo: adjust this to be based on meters and test
             if area < 3000:
                 continue
 
             m = cv2.moments(contour)
 
             # More accurate than the bounding box, especially for single damper pickups
-            # todo: this whole thing needs to be cleaned up to more readable, perhaps split up into different functions
             if m['m00'] != 0.0:
                 c_x = int(m['m10'] / m['m00'])
                 c_y = int(m['m01'] / m['m00'])
 
                 x, y, w, h = cv2.boundingRect(contour)
 
-                cv2.rectangle(image, (x, y), (x +w, y +h), (0,255,0), 2)
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
                 min_length_damper = 0.048
                 max_length_damper = 0.06
@@ -213,9 +195,11 @@ class Camera:
                             if cv2.countNonZero(crop_to_check_if_damper_exists) != 0:
                                 bnd_rect_x = int(x + (width_counter * pxl_w_damper))
                                 bnd_rect_y = int(y + (length_counter * pxl_h_damper))
-                                cv2.rectangle(image, (bnd_rect_x, bnd_rect_y), (bnd_rect_x + pxl_w_damper, bnd_rect_y + pxl_h_damper), (255,0,0), 2)
+                                cv2.rectangle(image, (bnd_rect_x, bnd_rect_y),
+                                              (bnd_rect_x + pxl_w_damper, bnd_rect_y + pxl_h_damper), (255, 0, 0), 2)
 
-                                array_of_damper_locations.append(Damper(current_damper_x, current_damper_y, layer_z, False))
+                                array_of_damper_locations.append(
+                                    Damper(current_damper_x, current_damper_y, layer_z, False))
 
                             width_counter += 1
                         length_counter += 1
@@ -241,7 +225,7 @@ class Camera:
     def find_slats(self, image, detection_z):
         image_middle = image[120:360, 120: 520]
 
-        big_kernel = np.ones((8,8), np.uint8)
+        big_kernel = np.ones((8, 8), np.uint8)
         image_middle = cv2.dilate(image_middle, big_kernel, iterations=1)
 
         image[120:360, 120: 520] = image_middle
@@ -281,8 +265,8 @@ class Camera:
         for contour in contours:
             area = cv2.contourArea(contour)
 
-            #todo: change to be dependant on detection_z
-            if area < 10000:
+            # todo: change to be dependant on detection_z
+            if area < 20000:
                 continue
 
             x, y, w, h = cv2.boundingRect(contour)
@@ -290,14 +274,17 @@ class Camera:
             rotated_rect = cv2.minAreaRect(contour)
             box = cv2.boxPoints(rotated_rect)  # cv2.boxPoints(rect) for OpenCV 3.x
             box = np.int0(box)
-            cv2.drawContours(dilation, [box], 0, (255, 255, 255), 25)
+            cv2.drawContours(dilation, [box], 0, (255, 255, 255), 30)
 
             x1 = x
             x2 = x + w
             y1 = y
             y2 = y + h
 
-            y_middle = int((y + y + h)/2)
+            y_middle = int((y + y + h) / 2)
+
+        if x1 is None:
+            return None
 
         blank_image = np.zeros(shape=[480, 640, 3], dtype=np.uint8)
 
@@ -364,7 +351,7 @@ class Camera:
                 average_y = int(total_y / len(sorted_column))
 
                 slats.append((average_x, average_y))
-            elif counter == len(sorted_edge_columns)-1:
+            elif counter == len(sorted_edge_columns) - 1:
                 total_x, total_y = 0, 0
 
                 for point in sorted_column:
@@ -478,13 +465,7 @@ class Camera:
                 counter += 1
             new_damper_grid.append(new_column)
 
-
-        print(new_damper_grid)
         return new_damper_grid
-
-
-
-
 
     def remove_duplicates(self, unsorted_dampers, layer_z):
         unsorted = list(unsorted_dampers.copy())
@@ -496,7 +477,8 @@ class Camera:
             j = 0
             while j < len(unsorted):
                 if i != j:
-                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < two_cm and abs(unsorted[i].get_y() - unsorted[j].get_y()) < two_cm:
+                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < two_cm and abs(
+                            unsorted[i].get_y() - unsorted[j].get_y()) < two_cm:
                         unsorted.remove(unsorted[j])
                         print("duplicate removed")
                 j += 1

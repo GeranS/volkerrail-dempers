@@ -52,7 +52,6 @@ class PickOrderLogic:
         # Every iteration is one layer
         while True:
             image, detection_z, layer_z = self.camera.get_top_layer_image()
-            # todo: remove slats before continuing
             slats = self.camera.find_slats(image, detection_z)
 
             if slats is not None:
@@ -102,7 +101,6 @@ class PickOrderLogic:
                     if key == ord('s'):
                         break
 
-                cv2.destroyAllWindows()
                 while self.busy:
                     time.sleep(0.5)
                     self.busy = True
@@ -117,6 +115,7 @@ class PickOrderLogic:
 
         damper_1, damper_2 = self.find_first_pair(dampers)
 
+        # todo: single damper detection/pickup and movement needs a left/right system
         if damper_1 is None:
             damper_single = find_first_single(dampers)
 

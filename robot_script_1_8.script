@@ -21,6 +21,7 @@ pose_above_belt = pose_add(p[0.663, 0.445, 0.218, 0, 0, 0], hoeknaarAA(90))
 pose_on_belt_right = pose_add(p[0.663, 0.528, 0.143, 0, 0, 0], hoeknaarAA(90))
 pose_on_belt_left = pose_add(p[0.663, 0.396, 0.143, 0, 0, 0], hoeknaarAA(90))
 pose_safe = pose_add(p[0.663, 0.396, 0.400, 0, 0, 0], hoeknaarAA(90))
+pose_slat_drop = pose_add(p[0,0,0,0,0,0], hoeknaarAA(90))
 
 def pick_up_and_move(pose_target):
   #Moves the arm to above the target pose
@@ -65,6 +66,26 @@ def pick_up_and_move(pose_target):
   movel(pose_safe)
 end
 
+def remove_slat(pose_target):
+  #Moves the arm to above the target pose
+  pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
+  movel(pose_above_target)
+
+  #Moves the arm to be on top of the target slat
+  pose_on_target = pose_add(pose_target, p[0,0,0,0,0,0])
+  movel(pose_on_target)
+
+  set_digital_out(1, True)
+  set_digital_out(3, True)
+
+  movel(pose_above_target)
+
+  movel(pose_slat_drop)
+
+  set_digital_out(1, False)
+  set_digital_out(3, False)
+end
+
 while (True):
   received = socket_read_string(socket_name)
   if received == "MOVE":
@@ -75,6 +96,15 @@ while (True):
     pose_final = pose_add(pose, hoeknaarAA(90))
 
     pick_up_and_move(pose_final)
+    socket_send_string("DONE", socket_name)
+  elif received == "SLAT":
+    #Expected format data string "?(x, y, z)"
+    pose_received = socket_read_ascii_float(3, socket_name)
+    pose = p[pose_received[1], pose_received[2], pose_received[3], 0, 0, 0]
+
+    pose_final = pose_add(pose, hoeknaarAA(90))
+
+    remove_slat(pose_final)
     socket_send_string("DONE", socket_name)
   elif received == "SAFE":
     #Move to safe position
