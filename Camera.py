@@ -232,7 +232,7 @@ class Camera:
         if len(array_of_damper_locations) == 0:
             return None, image
 
-        array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
+        array_of_damper_locations = self.remove_duplicates(array_of_damper_locations, layer_z)
 
         dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
 
@@ -470,17 +470,17 @@ class Camera:
 
         return new_row
 
-    # todo: change pixel comparisons to meter comparisons and test
-    # todo: fix infinite loop bug
-    def remove_duplicates(self, unsorted_dampers):
+    def remove_duplicates(self, unsorted_dampers, layer_z):
         unsorted = list(unsorted_dampers.copy())
+
+        two_cm = self.conversion_service.convert_meters_to_pixels(0.02, layer_z)
 
         i = 0
         while True:
             j = 0
             while j < len(unsorted):
                 if i != j:
-                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < 8 and abs(unsorted[i].get_y() - unsorted[j].get_y()) < 8:
+                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < two_cm and abs(unsorted[i].get_y() - unsorted[j].get_y()) < two_cm:
                         unsorted.remove(unsorted[j])
                         print("duplicate removed")
                 j += 1
