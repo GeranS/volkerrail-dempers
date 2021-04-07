@@ -1,33 +1,33 @@
 import numpy as np
 import cv2
 
-properties=["CV_CAP_PROP_FRAME_WIDTH",# Width of the frames in the video stream.
-            "CV_CAP_PROP_FRAME_HEIGHT",# Height of the frames in the video stream.
-            "CV_CAP_PROP_BRIGHTNESS",# Brightness of the image (only for cameras).
-            "CV_CAP_PROP_CONTRAST",# Contrast of the image (only for cameras).
-            "CV_CAP_PROP_SATURATION",# Saturation of the image (only for cameras).
-            "CV_CAP_PROP_GAIN",# Gain of the image (only for cameras).
-            "CV_CAP_PROP_EXPOSURE"]
+properties=["CAP_PROP_FRAME_WIDTH",# Width of the frames in the video stream.
+            "CAP_PROP_FRAME_HEIGHT",# Height of the frames in the video stream.
+            "CAP_PROP_BRIGHTNESS",# Brightness of the image (only for cameras).
+            "CAP_PROP_CONTRAST",# Contrast of the image (only for cameras).
+            "CAP_PROP_SATURATION",# Saturation of the image (only for cameras).
+            "CAP_PROP_GAIN",# Gain of the image (only for cameras).
+            "CAP_PROP_EXPOSURE"]
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 for prop in properties:
-    val=cap.get(eval("cv2.cv."+prop))
-    print prop+": "+str(val)
+    val=cap.get(eval("cv2."+prop))
+    print(prop+": "+str(val))
 
 gain=0
-cap.set(cv2.cv.CV_CAP_PROP_GAIN,gain)
+cap.set(cv2.CAP_PROP_GAIN,gain)
 
-brightness=60
-cap.set(cv2.cv.CV_CAP_PROP_BRIGHTNESS,brightness)
+brightness=110
+cap.set(cv2.CAP_PROP_BRIGHTNESS,brightness)
 
-contrast=20
-cap.set(cv2.cv.CV_CAP_PROP_CONTRAST,contrast)
+contrast=100
+cap.set(cv2.CAP_PROP_CONTRAST,contrast)
 
-saturation=20
-cap.set(cv2.cv.CV_CAP_PROP_SATURATION,saturation)
+saturation=128
+cap.set(cv2.CAP_PROP_SATURATION,saturation)
 
-exposure=-1
-cap.set(cv2.cv.CV_CAP_PROP_EXPOSURE,exposure)
+exposure=-6
+cap.set(cv2.CAP_PROP_EXPOSURE,exposure)
 
 while(True):
     # Capture frame-by-frame
@@ -37,39 +37,39 @@ while(True):
     #rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     rgb=frame
 
-    print "\n\n"
+    print("\n\n")
     for prop in properties:
-        val=cap.get(eval("cv2.cv."+prop))
-        print prop+": "+str(val)
+        val=cap.get(eval("cv2."+prop))
+        print(prop+": "+str(val))
     # Display the resulting frame
     cv2.imshow('frame',rgb)
-    key=cv2.waitKey(1)
+    key=cv2.waitKey(1000)
     if key == ord('x'):
         break
     elif key == ord('w'):
         brightness+=1
-        cap.set(cv2.cv.CV_CAP_PROP_BRIGHTNESS,brightness)
+        cap.set(cv2.CAP_PROP_BRIGHTNESS,brightness)
     elif key == ord('s'):
         brightness-=1
-        cap.set(cv2.cv.CV_CAP_PROP_BRIGHTNESS,brightness)
+        cap.set(cv2.CAP_PROP_BRIGHTNESS,brightness)
     elif key == ord('d'):
         contrast+=1
-        cap.set(cv2.cv.CV_CAP_PROP_CONTRAST,contrast)
+        cap.set(cv2.CAP_PROP_CONTRAST,contrast)
     elif key == ord('a'):
         contrast-=1
-        cap.set(cv2.cv.CV_CAP_PROP_CONTRAST,contrast)
+        cap.set(cv2.CAP_PROP_CONTRAST,contrast)
     elif key == ord('e'):
         saturation+=1
-        cap.set(cv2.cv.CV_CAP_PROP_SATURATION,saturation)
+        cap.set(cv2.CAP_PROP_SATURATION,saturation)
     elif key == ord('q'):
         saturation-=1
-        cap.set(cv2.cv.CV_CAP_PROP_SATURATION,saturation)
+        cap.set(cv2.CAP_PROP_SATURATION,saturation)
     elif key == ord('z'):
         exposure+=1
-        cap.set(cv2.cv.CV_CAP_PROP_EXPOSURE,exposure)
+        cap.set(cv2.CAP_PROP_EXPOSURE,exposure)
     elif key == ord('c'):
         exposure-=1
-        cap.set(cv2.cv.CV_CAP_PROP_EXPOSURE,exposure)
+        cap.set(cv2.CAP_PROP_EXPOSURE,exposure)
 
 # When everything done, release the capture
 cap.release()
