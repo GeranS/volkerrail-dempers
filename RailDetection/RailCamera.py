@@ -1,11 +1,22 @@
 import cv2
 import numpy as np
+import Blob
+import socket
+import struct
+import sys
 
 TEST = False
 
+# Set Values
 PIXEL_PER_MM = 2.2
 HALF_SCREEN = 320
+old_trigger = 99
 
+# PLC configuration
+TCP_IP = '192.168.0.1' # IP address of the PLC
+TCP_PORT = 2000	# Port configured in the PLC
+
+# Camera calibration property-strings
 properties = ["CAP_PROP_FRAME_WIDTH",  # Width of the frames in the video stream.
               "CAP_PROP_FRAME_HEIGHT",  # Height of the frames in the video stream.
               "CAP_PROP_BRIGHTNESS",  # Brightness of the image (only for cameras).
@@ -13,9 +24,6 @@ properties = ["CAP_PROP_FRAME_WIDTH",  # Width of the frames in the video stream
               "CAP_PROP_SATURATION",  # Saturation of the image (only for cameras).
               "CAP_PROP_GAIN",  # Gain of the image (only for cameras).
               "CAP_PROP_EXPOSURE"]
-
-def halfway_trigger():
-
 
 def find_paste(image):
     image_copy = image.copy()
@@ -43,16 +51,37 @@ def find_paste(image):
         centre_x = int(x + (w / 2))
         centre_y = int(y + (h / 2))
 
-        cv2.rectangle(output_image, (x, y), (x + w, y + h), (255, 0, 0), 5)
-        cv2.circle(output_image, (centre_x, centre_y), 5, (255, 0, 0), 5)
+        if RC.paste is None:
+            RC.paste = Blob.Blob(h, w, x, y, centre_x, centre_y)
 
-        cv2.rectangle(image_copy, (x, y + crop_away_top), (x + w, y + h + crop_away_top), (255, 0, 0), 5)
-        cv2.circle(image_copy, (centre_x, centre_y + crop_away_top), 5, (255, 0, 0), 5)
+        elif abs(centre_x - RC.paste.centre_x) < 10:
+            RC.paste.x = x
+            RC.paste.y = y
+            RC.paste.centre_x = centre_x
+            RC.paste.centre_y = centre_y
+            RC.paste.width = w
+            RC.paste.height = h
+
+            if RC.paste.centre_x < HALF_SCREEN:
+                RC.paste.state = True
+                cv2.rectangle(image_copy, (RC.paste.x, RC.paste.y + crop_away_top),(RC.paste.x + RC.paste.width, RC.paste.y  + RC.paste.height + crop_away_top), (0, 0, 255), 3)
+                cv2.circle(image_copy, (RC.paste.centre_x, RC.paste.centre_y + crop_away_top), 5, (0, 0, 255), 3)
+
+            else:
+                cv2.rectangle(image_copy, (RC.paste.x, RC.paste.y + crop_away_top),(RC.paste.x + RC.paste.width, RC.paste.y + RC.paste.height + crop_away_top), (255, 0, 0),3)
+                cv2.circle(image_copy, (RC.paste.centre_x, RC.paste.centre_y + crop_away_top), 5, (255, 0, 0), 3)
+
+        elif abs(centre_x - RC.paste.centre_x) > 10:
+            RC.paste = None
 
         if TEST:
             perimeter = cv2.arcLength(contour, True)
+            print("Blob1")
             print("Perimeter: {}".format(perimeter))
-            print("Width = {:.1f} ; Height = {:.1f}".format(w / PIXEL_PER_MM, h / PIXEL_PER_MM))
+            print("Width = {:.1f} ; Height = {:.1f}".format(RC.paste.width, RC.paste.height))
+
+    if len(contours) is None:
+        RC.paste = None
 
     return output_image, image_copy, image_cropped_black_and_white
 
@@ -62,6 +91,7 @@ class RailCamera:
         # todo: determine what kind of camera to use and do the setup here, likely to just be a normal camera but
         #  we're not sure yet
         print("Initialising rail camera.")
+        self.paste = None
         self.user_input = input("Photo (p) or camera (c)")
         self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
@@ -122,6 +152,17 @@ if __name__ == "__main__":
     # else:
     RC = RailCamera()
 
+    # Start the connection
+    try:
+        # Try to connect to the PLC
+        conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        conn.connect((TCP_IP, TCP_PORT))
+    except Exception as e:
+        # Show an error message if the script can't connect to the PLC
+        print("Error while trying to connect to the PLC. Error message: ", str(e))
+        # And stop this script
+        sys.exit()
+
     while True:
         ret, RC.frame = RC.cap.read()
 
@@ -132,7 +173,23 @@ if __name__ == "__main__":
         cv2.imshow('rail', output_image)
         cv2.imshow('normal', copy)
 
-        key = cv2.waitKey(500)
+        if RC.paste.state:
+            if old_trigger == 99:
+                trigger = 3
+                old_trigger = 3
+
+        if old_trigger == 3:
+            trigger = 99
+            old_trigger = 99
+
+        # Convert the number to bytes in big-endian style
+        send_data = struct.pack(">h", trigger)
+        # print("Raw: ", send_data)
+
+        # Send the data
+        conn.send(send_data)
+
+        key = cv2.waitKey(1)
 
         if TEST:
             RC.set_cap_properties(key)
