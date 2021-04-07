@@ -31,8 +31,17 @@ class HttpService:
         # necessary to not overwhelm robot with messages, can be lower
         time.sleep(0.5)
 
-        # todo: temporary fix, has to be changed back once new z system is implemented
-        message_string = '({x:.4f},{y:.4f},{z:.4f})'.format(x=robot_x, y=robot_y, z=0.063)
+        message_string = '({x:.4f},{y:.4f},{z:.4f})'.format(x=robot_x, y=robot_y, z=robot_z)
+        self.send_command(message_string)
+
+    def send_move_slats_command(self, robot_x, robot_y, robot_z):
+        message_string = 'SLATS'
+        self.send_command(message_string)
+
+        # necessary to not overwhelm robot with messages, can be lower
+        time.sleep(0.5)
+
+        message_string = '({x:.4f},{y:.4f},{z:.4f})'.format(x=robot_x, y=robot_y, z=robot_z)
         self.send_command(message_string)
 
     def send_safe_command(self):

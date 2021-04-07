@@ -54,6 +54,12 @@ class PickOrderLogic:
             image, detection_z, layer_z = self.camera.get_top_layer_image()
             # todo: remove slats before continuing
             slats = self.camera.find_slats(image, detection_z)
+
+            if slats is not None:
+                self.remove_slats(slats, layer_z)
+
+                image, detection_z, layer_z = self.camera.get_top_layer_image()
+
             array_of_dampers, original_image = self.camera.find_dampers(image, detection_z, layer_z)
             image = original_image.copy()
 
@@ -162,6 +168,17 @@ class PickOrderLogic:
                 i += 2
 
         return None, None
+
+    def remove_slats(self, slats, layer_z):
+
+        for slat in slats:
+            x, y = slat
+            robot_x, robot_y, robot_z = self.conversion_service.convert_to_robot_coordinates(x, y, layer_z)
+
+            while self.busy:
+                time.sleep(0.5)
+
+            self.http_service.send_move_slats_command(robot_x, robot_y, robot_z)
 
     def set_robot_done(self):
         self.busy = False

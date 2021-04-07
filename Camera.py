@@ -87,7 +87,7 @@ class Camera:
 
         # todo: Works for now, but requires further tuning for reliability
         closest_object_in_meters = float(smallest_most_common) * self.sensor.get_option(rs.option.depth_units)
-        detection_z = closest_object_in_meters + 0.03
+        detection_z = closest_object_in_meters + 0.025
         print(detection_z)
 
         # Set appropriate distance for layer
@@ -120,8 +120,7 @@ class Camera:
         edged = cv2.Canny(dilation, 30, 200)
 
         while True:
-            cv2.imshow('dempers', original_image)
-            cv2.imshow('dempers2', dilation)
+            cv2.imshow('dempers', dilation)
 
             key = cv2.waitKey(1)
 
@@ -162,7 +161,7 @@ class Camera:
 
                 cv2.rectangle(image, (x, y), (x +w, y +h), (0,255,0), 2)
 
-                min_length_damper = 0.05
+                min_length_damper = 0.048
                 max_length_damper = 0.06
 
                 min_width_damper = 0.12
@@ -194,7 +193,7 @@ class Camera:
                     array_of_damper_locations.append(Damper(c_x, c_y, layer_z, False))
                     cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 2)
                 else:
-                    pxl_h_damper = int(h / amount_long)
+                    pxl_h_damper = int(h / minimum_amount_lengthwise)
                     half_height = pxl_h_damper / 2
 
                     pxl_w_damper = int(w / amount_wide)
@@ -233,7 +232,7 @@ class Camera:
         if len(array_of_damper_locations) == 0:
             return None, image
 
-        # array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
+        array_of_damper_locations = self.remove_duplicates(array_of_damper_locations)
 
         dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
 
@@ -259,7 +258,7 @@ class Camera:
         iterations = 10
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(image, kernel, iterations=iterations)
-        kernel = np.ones((3, 3), np.uint8)
+        kernel = np.ones((4, 4), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
 
         while True:
@@ -276,6 +275,8 @@ class Camera:
         contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         x1, x2, y1, y2 = None, None, None, None
+
+        y_middle = 0
 
         for contour in contours:
             area = cv2.contourArea(contour)
@@ -296,20 +297,103 @@ class Camera:
             y1 = y
             y2 = y + h
 
-        while True:
-            cv2.imshow('dempers', dilation)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
+            y_middle = int((y + y + h)/2)
 
         blank_image = np.zeros(shape=[480, 640, 3], dtype=np.uint8)
 
         blank_image[y1: y2, x1: x2] = cv2.bitwise_not(dilation[y1: y2, x1: x2])
 
         inverted = blank_image
+
+        if cv2.countNonZero(cv2.cvtColor(inverted, cv2.COLOR_BGR2GRAY)) < 100:
+            return None
+
+        inverted_edge = cv2.Canny(inverted, 30, 200)
+
+        inverted_contours, _ = cv2.findContours(inverted_edge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # x and y coordinates of slat edges
+        edges = []
+
+        two_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.02, detection_z)
+        five_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.05, detection_z)
+
+        for inv_con in inverted_contours:
+            cv2.drawContours(inverted, [inv_con], 0, (255, 0, 0), 2)
+
+            x, y, w, h = cv2.boundingRect(inv_con)
+
+            left_edge = (x, y_middle)
+            right_edge = (x + w, y_middle)
+
+            if left_edge[0] - five_centimeters_in_pixels > x1:
+                edges.append(left_edge)
+
+            if right_edge[0] + five_centimeters_in_pixels < x2:
+                edges.append(right_edge)
+
+        edge_columns = []
+
+        for edge in edges:
+            if len(edge_columns) == 0:
+                edge_columns.append([edge])
+            else:
+                fits_in_existing_column = False
+                for edge_in_column in edge_columns:
+                    if abs(edge_in_column[0][0] - edge[0]) < 10:
+                        edge_in_column.append(edge)
+                        fits_in_existing_column = True
+                        break
+
+                if fits_in_existing_column is False:
+                    edge_columns.append([edge])
+
+        sorted_edge_columns = sorted(edge_columns, key=lambda c: c[0][0])
+
+        slats = []
+        counter = 0
+        for sorted_column in sorted_edge_columns:
+            if counter == 0:
+                total_x, total_y = 0, 0
+
+                for point in sorted_column:
+                    total_x += point[0]
+                    total_y += point[1]
+
+                average_x = int(total_x / len(sorted_column)) - two_centimeters_in_pixels
+                average_y = int(total_y / len(sorted_column))
+
+                slats.append((average_x, average_y))
+            elif counter == len(sorted_edge_columns)-1:
+                total_x, total_y = 0, 0
+
+                for point in sorted_column:
+                    total_x += point[0]
+                    total_y += point[1]
+
+                average_x = int(total_x / len(sorted_column)) + two_centimeters_in_pixels
+                average_y = int(total_y / len(sorted_column))
+
+                slats.append((average_x, average_y))
+            elif counter % 2 == 1:
+                total_x, total_y = 0, 0
+
+                for point in sorted_column:
+                    total_x += point[0]
+                    total_y += point[1]
+
+                for point in sorted_edge_columns[counter + 1]:
+                    total_x += point[0]
+                    total_y += point[1]
+
+                average_x = int(total_x / (len(sorted_column) + len(sorted_edge_columns[counter + 1])))
+                average_y = int(total_y / (len(sorted_column) + len(sorted_edge_columns[counter + 1])))
+
+                slats.append((average_x, average_y))
+            counter += 1
+
+        for slat in slats:
+            cv2.drawMarker(inverted, (slat[0], slat[1]), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=2)
 
         while True:
             cv2.imshow('dempers', inverted)
@@ -319,40 +403,6 @@ class Camera:
             # and self.busy is False
             if key == ord('s'):
                 break
-
-        # todo: anything past this line may or may not no longer be relevant
-
-        #edged = cv2.Canny(inverted_cropped, 30, 200)
-
-        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        possible_slats = [[(0, 0)]]
-        slats = []
-
-        two_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.02, detection_z)
-
-        # Finding the empty spaces between the dampers and slats
-        for contour in contours:
-            x, y, w, _ = cv2.boundingRect(contour)
-
-            y = y - two_centimeters_in_pixels
-            x = x + int(w/2)
-
-            for possible in possible_slats:
-                if abs(y - possible[0][1]) > 5:
-                    possible_slats.append([(x, y)])
-                else:
-                    possible.append((x, y))
-
-        for possible_slat in possible_slats:
-            sorted_possible_slat = sorted(possible_slat, key=lambda ps: ps[0])
-            leftmost_coord = sorted_possible_slat[0]
-            rightmost_coord = sorted_possible_slat[len(sorted_possible_slat) - 1]
-
-            average_x = (leftmost_coord[0] + rightmost_coord[0]) / 2
-            average_y = (leftmost_coord[1] + rightmost_coord[1]) / 2
-
-            slats.append((average_x, average_y))
 
         return slats
 
@@ -421,26 +471,22 @@ class Camera:
         return new_row
 
     # todo: change pixel comparisons to meter comparisons and test
+    # todo: fix infinite loop bug
     def remove_duplicates(self, unsorted_dampers):
+        unsorted = list(unsorted_dampers.copy())
+
         i = 0
-
-        list_without_duplicates = []
-
-        while i < len(unsorted_dampers):
-            j = i + 1
-
-            current_damper = unsorted_dampers[i]
-            is_duplicate = False
-            while j < len(unsorted_dampers):
-                possible_duplicate = unsorted_dampers[j]
-
-                if abs(current_damper.get_x() - possible_duplicate.get_x()) < 10 and abs(
-                        current_damper.get_y() - possible_duplicate.get_y()) < 10:
-                    is_duplicate = True
-
+        while True:
+            j = 0
+            while j < len(unsorted):
+                if i != j:
+                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < 8 and abs(unsorted[i].get_y() - unsorted[j].get_y()) < 8:
+                        unsorted.remove(unsorted[j])
+                        print("duplicate removed")
                 j += 1
+            i += 1
 
-            if not is_duplicate:
-                list_without_duplicates.append(unsorted_dampers[i])
+            if i == len(unsorted):
+                break
 
-        return list_without_duplicates
+        return unsorted

@@ -25,11 +25,11 @@ pose_safe = pose_add(p[0.663, 0.396, 0.400, 0, 0, 0], hoeknaarAA(90))
 def pick_up_and_move(pose_target):
   #Moves the arm to above the target pose
   pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
-  movej(pose_above_target)
+  movel(pose_above_target)
 
   #Moves the arm to be on top of the target dampers
   pose_on_target = pose_add(pose_target, p[0,0,0,0,0,0])
-  movej(pose_on_target)
+  movel(pose_on_target)
 
   #Activates suction
   set_payload(6, [0,0,-0.1])
@@ -39,28 +39,30 @@ def pick_up_and_move(pose_target):
   set_digital_out(3, True)
 
   #Moves arm back up
-  movej(pose_above_target)
+  movel(pose_above_target)
 
   #Moves arm to above conveyor
-  movej(pose_above_belt)
+  movel(pose_above_belt)
 
   #Moves arms down to conveyor left side
-  movej(pose_on_belt_left)
+  movel(pose_on_belt_left)
   set_digital_out(0, False)
   set_digital_out(1, False)
 
+  set_payload(3,[0,0,-0.1])
+
   #Moves arms down to conveyor left side
-  movej(pose_on_belt_right)
+  movel(pose_on_belt_right)
   set_digital_out(2, False)
   set_digital_out(3, False)
 
-  set_payload(0)
+  set_payload(0,[0,0,0])
 
   #Moves arm to above conveyor
-  movej(pose_above_belt)
+  movel(pose_above_belt)
 
   #Moves arm to safe pose
-  movej(pose_safe)
+  movel(pose_safe)
 end
 
 while (True):
