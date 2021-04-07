@@ -1,10 +1,9 @@
-import collections
+from ConversionService import ConversionService
 
+import collections
 import cv2
 import numpy as np
 import pyrealsense2 as rs
-
-from ConversionService import ConversionService
 
 
 class Damper:

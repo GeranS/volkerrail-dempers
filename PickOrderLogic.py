@@ -1,5 +1,3 @@
-import numpy as np
-
 import Camera
 import ConversionService
 import HttpService

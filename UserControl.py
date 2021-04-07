@@ -1,6 +1,3 @@
-from tkinter import *
-import cv2
-
 import PickOrderLogic
 
 
