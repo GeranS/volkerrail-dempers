@@ -234,7 +234,7 @@ class Camera:
 
         array_of_damper_locations = self.remove_duplicates(array_of_damper_locations, layer_z)
 
-        dampers_sorted = self.split_unsorted_array_into_row(array_of_damper_locations)
+        dampers_sorted = self.split_unsorted_array_into_columns(array_of_damper_locations)
 
         return dampers_sorted, image
 
@@ -406,69 +406,85 @@ class Camera:
 
         return slats
 
-    def split_unsorted_array_into_row(self, dampers):
-        rows = []
-
-        # todo: is this still needed?
-        # sorted_by_y = sorted(dampers, key=lambda x: x.y, reverse=True)
+    def split_unsorted_array_into_columns(self, dampers):
+        columns = []
 
         sorted_by_x = sorted(dampers, key=lambda x: x.x, reverse=True)
-        smallest_x = sorted_by_x[0].get_x()
 
         while len(sorted_by_x) != 0:
-            current_row = []
-            current_row_x = sorted_by_x[0].get_x()
+            current_column = []
+            current_column_x = sorted_by_x[0].get_x()
             while True:
-                if len(sorted_by_x) > 0 and current_row_x - 30 < sorted_by_x[0].get_x() < current_row_x + 30:
-                    current_row.append(sorted_by_x[0])
+                if len(sorted_by_x) > 0 and current_column_x - 30 < sorted_by_x[0].get_x() < current_column_x + 30:
+                    current_column.append(sorted_by_x[0])
                     sorted_by_x.remove(sorted_by_x[0])
-                    print("this triggers")
                     continue
                 break
 
-            # todo: fix this
-            # if len(current_row) != 8:
-            #    current_row = self.insert_spaces_into_row(current_row, smallest_x)
+            current_column = sorted(current_column, key=lambda x: x.y, reverse=True)
 
-            current_row = sorted(current_row, key=lambda x: x.y, reverse=True)
+            columns.append(current_column)
 
-            rows.append(current_row)
+        columns = self.insert_spaces_into_damper_grid(columns)
 
-        return rows
+        return columns
 
     # Inserts None into spaces where there should be a damper but isn't
-    # todo: fix this
-    def insert_spaces_into_row(self, row, smallest_x):
-        new_row = []
+    def insert_spaces_into_damper_grid(self, damper_grid):
 
-        z = row[0].get_z()
+        y_list = []
 
-        average_distance_between_centers_in_meters = 0.10
-        average_distance_between_centers = self.conversion_service \
-            .convert_meters_to_pixels(average_distance_between_centers_in_meters, z)
+        for row in damper_grid:
+            for damper in row:
+                y_list.append(damper.get_y())
 
-        i = 0
-        counter_distance = 0
-        while i < len(row):
-            if smallest_x - 10 + (counter_distance * average_distance_between_centers) < row[i].get_x() < smallest_x + \
-                    10 + (counter_distance * average_distance_between_centers):
-                new_row.append(row[i])
+        y_rows = []
 
-                i += 1
-                counter_distance += 1
+        counter = 0
+        # todo: improvement possible, but check if necessary since I don't want to write any more new for loops than
+        #  absolute necessary
+        for y_point in y_list:
+            match = False
+            if counter == 0:
+                y_rows.append(y_point)
             else:
-                new_row.append(None)
-                counter_distance += 1
+                for y_row in y_rows:
+                    if abs(y_row - y_point) < 8:
+                        match = True
+                        break
 
-        nones_to_add = 0
-        if len(new_row) < 8:
-            nones_to_add = 8 - len(new_row)
+                if match is False:
+                    y_rows.append(y_point)
+            counter += 1
 
-        i = 0
-        while i < nones_to_add:
-            new_row.append(None)
+        sorted_y_rows = sorted(y_rows)
 
-        return new_row
+        new_damper_grid = []
+
+        for column in damper_grid:
+            new_column = np.empty(len(sorted_y_rows), dtype=object)
+
+            counter = 0
+            for y_row in sorted_y_rows:
+                found_match = False
+                for damper in column:
+                    if abs(y_row - damper.get_y()) < 10:
+                        new_column[counter] = damper
+                        found_match = True
+
+                if found_match is False:
+                    new_column[counter] = None
+
+                counter += 1
+            new_damper_grid.append(new_column)
+
+
+        print(new_damper_grid)
+        return new_damper_grid
+
+
+
+
 
     def remove_duplicates(self, unsorted_dampers, layer_z):
         unsorted = list(unsorted_dampers.copy())
