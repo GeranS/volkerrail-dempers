@@ -1,5 +1,6 @@
 #Created 2021-03-24
-#Urscript version 1.8
+#Urscript version 1.8 - to be updated to 3.12
+#Robot version 3.12
 
 def hoeknaarAA(lighoek):
   arad = d2r(lighoek + 45) #is lighoek radialen
@@ -18,12 +19,16 @@ socket = socket_open(ip, port, socket_name)
 
 #Set poses
 pose_above_belt = pose_add(p[0.663, 0.445, 0.218, 0, 0, 0], hoeknaarAA(90))
-pose_on_belt_right = pose_add(p[0.663, 0.528, 0.143, 0, 0, 0], hoeknaarAA(90))
-pose_on_belt_left = pose_add(p[0.663, 0.396, 0.143, 0, 0, 0], hoeknaarAA(90))
+pose_on_belt_right = pose_add(p[0.663, 0.535, 0.101, 0, 0, 0], hoeknaarAA(90))
+pose_on_belt_left = pose_add(p[0.663, 0.390, 0.101, 0, 0, 0], hoeknaarAA(90))
 pose_safe = pose_add(p[0.663, 0.396, 0.400, 0, 0, 0], hoeknaarAA(90))
-pose_slat_drop = pose_add(p[0,0,0,0,0,0], hoeknaarAA(90))
+pose_slat_drop = pose_add(p[0.918,-0.209,0.230,0,0,0], hoeknaarAA(90))
 
-def pick_up_and_move(pose_target):
+pose_target = p[0,0,0,0,0,0]
+
+current_move_thread = 0
+
+thread pick_up_and_move():
   #Moves the arm to above the target pose
   pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
   movel(pose_above_target)
@@ -59,14 +64,21 @@ def pick_up_and_move(pose_target):
 
   set_payload(0,[0,0,0])
 
+  #Tells Python script that a damper has been placed so it can relay it to the PLC
+  socket_send_string("PLACED", socket_name)
+
   #Moves arm to above conveyor
   movel(pose_above_belt)
 
   #Moves arm to safe pose
   movel(pose_safe)
+
+  socket_send_string("DONE", socket_name)
+  current_move_thread = 0
 end
 
-def remove_slat(pose_target):
+# Might be able to move multiple slats in one go
+thread remove_slat():
   #Moves the arm to above the target pose
   pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
   movel(pose_above_target)
@@ -84,6 +96,10 @@ def remove_slat(pose_target):
 
   set_digital_out(1, False)
   set_digital_out(3, False)
+
+  current_move_thread = 0
+  socket_send_string("DONE", socket_name)
+  
 end
 
 while (True):
@@ -93,23 +109,29 @@ while (True):
     pose_received = socket_read_ascii_float(3, socket_name)
     pose = p[pose_received[1], pose_received[2], pose_received[3], 0, 0, 0]
 
-    pose_final = pose_add(pose, hoeknaarAA(90))
+    pose_target = pose_add(pose, hoeknaarAA(90))
 
-    pick_up_and_move(pose_final)
-    socket_send_string("DONE", socket_name)
+    current_move_thread = run pick_up_and_move()
   elif received == "SLAT":
     #Expected format data string "?(x, y, z)"
     pose_received = socket_read_ascii_float(3, socket_name)
     pose = p[pose_received[1], pose_received[2], pose_received[3], 0, 0, 0]
 
-    pose_final = pose_add(pose, hoeknaarAA(90))
+    pose_target = pose_add(pose, hoeknaarAA(90))
 
-    remove_slat(pose_final)
-    socket_send_string("DONE", socket_name)
+    current_move_thread = run remove_slat()
   elif received == "SAFE":
     #Move to safe position
     movej(pose_safe)
     socket_send_string("DONE", socket_name)
+  elif received == "STOP":
+    #Stop robot in place
+    kill current_move_thread
+    stopj(2)
+  elif received == "END":
+    #Finish current movement, move to safe, and end program
+    movej(pose_safe)
+    break
   end
 end
 

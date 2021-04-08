@@ -57,8 +57,6 @@ class Camera:
         self.colorizer.set_option(rs.option.max_distance, 0.1)
         self.colorizer.set_option(rs.option.histogram_equalization_enabled, False)
 
-    # todo: split z coordinate into a detection z and a damper z from a hardcoded table of distances
-    # todo: make detection z more reliable, currently it fails too often by setting the distance too close
     def get_top_layer_image(self):
         frames = self.pipeline.wait_for_frames()
 
@@ -86,7 +84,7 @@ class Camera:
 
         # todo: Works for now, but requires further tuning for reliability
         closest_object_in_meters = float(smallest_most_common) * self.sensor.get_option(rs.option.depth_units)
-        detection_z = closest_object_in_meters + 0.025
+        detection_z = closest_object_in_meters + 0.03
         print(detection_z)
 
         # Set appropriate distance for layer
@@ -105,12 +103,12 @@ class Camera:
 
     # Finds the dampers in the provided white to black image
     def find_dampers(self, image, detection_z, layer_z):
-        original_image = image.copy()
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        cv2.rectangle(gray, (0, 0), (640, 480), (0, 0, 0), 100)
         print("detection z: " + str(detection_z))
         print("layer z: " + str(layer_z))
 
-        iterations = 10
+        iterations = 8
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(gray, kernel, iterations=iterations)
         kernel = np.ones((5, 5), np.uint8)
@@ -120,16 +118,21 @@ class Camera:
 
         contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        cv2.drawContours(original_image, contours, -1, (0, 0, 255), 2)
+        cv2.drawContours(image, contours, -1, (0, 0, 255), 2)
 
         array_of_damper_locations = []
 
+        while True:
+            cv2.imshow('dempers', dilation)
+
+            key = cv2.waitKey(1)
+
+            # and self.busy is False
+            if key == ord('s'):
+                break
+
         for contour in contours:
             area = cv2.contourArea(contour)
-
-            # todo: adjust this to be based on meters and test
-            if area < 3000:
-                continue
 
             m = cv2.moments(contour)
 
@@ -142,11 +145,11 @@ class Camera:
 
                 cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-                min_length_damper = 0.048
+                min_length_damper = 0.05
                 max_length_damper = 0.06
 
                 min_width_damper = 0.12
-                max_width_damper = 0.16
+                max_width_damper = 0.17
 
                 h_meters = self.conversion_service.convert_pixels_to_meters(h, detection_z)
                 w_meters = self.conversion_service.convert_pixels_to_meters(w, detection_z)
@@ -154,7 +157,17 @@ class Camera:
                 minimum_area_damper = self.conversion_service.convert_meters_to_pixels(min_length_damper, detection_z) \
                                       * self.conversion_service.convert_meters_to_pixels(min_width_damper, detection_z)
 
-                if area < minimum_area_damper or h_meters < min_length_damper or w_meters < min_width_damper:
+                #if area < minimum_area_damper:
+                #    print("skipped over blob because area")
+                #    print("area: " + str(area) + " is less than:" + str(minimum_area_damper))
+                #    continue
+
+                if h_meters < min_length_damper:
+                    print("skipped over blob because length")
+                    continue
+
+                if w_meters < min_width_damper:
+                    print("skipped over blob because width")
                     continue
 
                 maximum_area_damper = self.conversion_service.convert_meters_to_pixels(max_length_damper, detection_z) \
@@ -170,9 +183,13 @@ class Camera:
                 amount_wide = maximum_amount_widthwise
                 amount_long = maximum_amount_lengthwise
 
-                if amount_wide == 1 and amount_long == 1:
+                if amount_wide == 1 and max_width_damper < w_meters:
+                    print("max: " + str(max_width_damper) + " actual: " + str(w_meters))
+                    continue
+
+                if amount_wide == 99 and amount_long == 1:
                     array_of_damper_locations.append(Damper(c_x, c_y, layer_z, False))
-                    cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 2)
+                    cv2.rectangle(image, (x, y), (x + w, y + h), (150, 150, 0), 2)
                 else:
                     pxl_h_damper = int(h / minimum_amount_lengthwise)
                     half_height = pxl_h_damper / 2
@@ -301,7 +318,7 @@ class Camera:
         # x and y coordinates of slat edges
         edges = []
 
-        two_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.02, detection_z)
+
         five_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.05, detection_z)
 
         for inv_con in inverted_contours:
@@ -336,6 +353,8 @@ class Camera:
 
         sorted_edge_columns = sorted(edge_columns, key=lambda c: c[0][0])
 
+        four_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.04, detection_z)
+
         slats = []
         counter = 0
         for sorted_column in sorted_edge_columns:
@@ -346,7 +365,7 @@ class Camera:
                     total_x += point[0]
                     total_y += point[1]
 
-                average_x = int(total_x / len(sorted_column)) - two_centimeters_in_pixels
+                average_x = int(total_x / len(sorted_column)) - four_centimeters_in_pixels
                 average_y = int(total_y / len(sorted_column))
 
                 slats.append((average_x, average_y))
@@ -357,7 +376,7 @@ class Camera:
                     total_x += point[0]
                     total_y += point[1]
 
-                average_x = int(total_x / len(sorted_column)) + two_centimeters_in_pixels
+                average_x = int(total_x / len(sorted_column)) + four_centimeters_in_pixels
                 average_y = int(total_y / len(sorted_column))
 
                 slats.append((average_x, average_y))
@@ -469,15 +488,15 @@ class Camera:
     def remove_duplicates(self, unsorted_dampers, layer_z):
         unsorted = list(unsorted_dampers.copy())
 
-        two_cm = self.conversion_service.convert_meters_to_pixels(0.02, layer_z)
+        four_cm = self.conversion_service.convert_meters_to_pixels(0.04, layer_z)
 
         i = 0
         while True:
             j = 0
             while j < len(unsorted):
                 if i != j:
-                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < two_cm and abs(
-                            unsorted[i].get_y() - unsorted[j].get_y()) < two_cm:
+                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < four_cm and abs(
+                            unsorted[i].get_y() - unsorted[j].get_y()) < four_cm:
                         unsorted.remove(unsorted[j])
                         print("duplicate removed")
                 j += 1

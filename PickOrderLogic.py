@@ -27,6 +27,16 @@ def find_first_single(dampers):
 class PickOrderLogic:
     def __init__(self):
         self.busy = False
+        self.auto = False
+
+        self.amount_of_dampers_previous_layer = 0
+
+        # Current layer of dampers, take new picture if none or all moved
+        self.dampers = []
+        # Slats
+        self.slats = []
+        # layer z
+        self.layer_z = []
 
         self.camera = Camera.Camera()
         self.http_service = HttpService.HttpService(self)
@@ -36,8 +46,50 @@ class PickOrderLogic:
         time.sleep(1)
         self.http_service.send_command('SAFE')
 
-    # Automatic mode automatically finds the dampers and moves them, without waiting for user input
     def start_automatic_mode(self):
+        self.auto = True
+
+        while self.auto:
+            if self.slats is not None:
+                if self.layer_z is None:
+                    self.http_service.send_code_to_plc(0)
+                    print("Layer_z is None while slats isn't None. Can't remove slats without layer_z.")
+                    break
+
+                self.remove_slats()
+
+            if self.dampers is None:
+                self.http_service.send_safe_command()
+                image, detection_z, layer_z = self.camera.get_top_layer_image()
+                self.layer_z = layer_z
+                slats = self.camera.find_slats(image, detection_z)
+
+                if slats is not None:
+                    self.slats = slats
+                    self.remove_slats()
+                else:
+                    array_of_dampers, original_image = self.camera.find_dampers(image, detection_z, layer_z)
+                    self.dampers = array_of_dampers
+
+                    # Dampers will be None if the detection failed to find any dampers. Something is likely blocking
+                    # the view of the camera.
+                    if self.dampers is None:
+                        self.http_service.send_code_to_plc(0)
+                        print("No dampers find, check pallet.")
+                        break
+            else:
+                no_picks_left = False
+
+                while no_picks_left is False:
+                    # Wait for robot to not be busy
+                    while self.busy:
+                        time.sleep(0.5)
+                    no_picks_left = self.choose_next_pick()
+
+        self.auto = False
+
+    # Mode for testing
+    def start_testing_mode(self):
         cv2.namedWindow('dempers')
 
         while True:
@@ -49,19 +101,26 @@ class PickOrderLogic:
 
         # Every iteration is one layer
         while True:
-            image, detection_z, layer_z = self.camera.get_top_layer_image()
-            slats = self.camera.find_slats(image, detection_z)
+            image, detection_z, self.layer_z = self.camera.get_top_layer_image()
+            self.slats = self.camera.find_slats(image, detection_z)
 
-            if slats is not None:
-                self.remove_slats(slats, layer_z)
+            if self.slats is not None:
+                self.remove_slats()
 
-                image, detection_z, layer_z = self.camera.get_top_layer_image()
+                self.http_service.send_safe_command()
 
-            array_of_dampers, original_image = self.camera.find_dampers(image, detection_z, layer_z)
+                self.busy = True
+
+                while self.busy:
+                    time.sleep(0.5)
+
+                image, detection_z, self.layer_z = self.camera.get_top_layer_image()
+
+            self.dampers, original_image = self.camera.find_dampers(image, detection_z, self.layer_z)
             image = original_image.copy()
 
             while True:
-                if array_of_dampers is None:
+                if self.dampers is None:
                     cv2.putText(original_image, "No dampers found, please check pallet.", (10, 40),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 255, 50))
                     cv2.imshow('dempers', original_image)
@@ -77,7 +136,7 @@ class PickOrderLogic:
 
                 damper_count = 1
 
-                for row in array_of_dampers:
+                for row in self.dampers:
                     for damper in row:
                         if damper is not None:
                             if damper.get_moved():
@@ -102,20 +161,18 @@ class PickOrderLogic:
                 while self.busy:
                     time.sleep(0.5)
                     self.busy = True
-                layer_done = self.choose_next_pick(array_of_dampers)
+                layer_done = self.choose_next_pick()
 
                 if layer_done:
                     break
 
-    def choose_next_pick(self, dampers):
-        while self.busy:
-            time.sleep(0.5)
-
-        damper_1, damper_2 = self.find_first_pair(dampers)
+    # todo: Not necessarily anything wrong with this method in general, but it looks ugly; please fix.
+    def choose_next_pick(self):
+        damper_1, damper_2 = self.find_first_pair()
 
         # todo: single damper detection/pickup and movement needs a left/right system
         if damper_1 is None:
-            damper_single = find_first_single(dampers)
+            damper_single = find_first_single(self.dampers)
 
             if damper_single is None:
                 return True
@@ -153,29 +210,37 @@ class PickOrderLogic:
 
         return True
 
-    def find_first_pair(self, dampers):
-        for column in dampers:
+    def find_first_pair(self):
+        for column in self.dampers:
+            if len(column) == 1:
+                continue
             counter = 0
             while True:
                 if column[counter] is not None and column[counter + 1] is not None:
                     if column[counter].get_moved() is False and column[counter + 1].get_moved() is False:
                         return column[counter], column[counter + 1]
                 counter += 2
-                if counter >= len(column):
+                if counter >= len(column)-1:
                     break
+
 
         return None, None
 
-    def remove_slats(self, slats, layer_z):
-
-        for slat in slats:
+    def remove_slats(self):
+        for slat in self.slats:
             x, y = slat
-            robot_x, robot_y, robot_z = self.conversion_service.convert_to_robot_coordinates(x, y, layer_z)
+            robot_x, robot_y, robot_z = self.conversion_service.convert_to_robot_coordinates(x, y, self.layer_z)
+
+            robot_x = robot_x - 0.05
 
             while self.busy:
                 time.sleep(0.5)
 
+            self.busy = True
             self.http_service.send_move_slats_command(robot_x, robot_y, robot_z)
+
+        while self.busy:
+            time.sleep(0.5)
 
     def set_robot_done(self):
         self.busy = False
