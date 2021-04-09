@@ -57,6 +57,17 @@ class Camera:
         self.colorizer.set_option(rs.option.max_distance, 0.1)
         self.colorizer.set_option(rs.option.histogram_equalization_enabled, False)
 
+    def take_picture_with_threshold(self, threshold_z):
+        frames = self.pipeline.wait_for_frames()
+        self.threshold_filter.set_option(rs.option.max_distance, threshold_z)
+
+        depth_frame = frames.get_depth_frame()
+        depth_frame = self.threshold_filter.process(depth_frame)
+
+        depth_colormap = np.asanyarray(self.colorizer.colorize(depth_frame).get_data())
+
+        return depth_colormap
+
     def get_top_layer_image(self):
         frames = self.pipeline.wait_for_frames()
 
@@ -72,7 +83,7 @@ class Camera:
 
         counter = collections.Counter(depth_image)
         # todo: determine most reliable most common set size, the more dampers there are the smaller it can be
-        most_common = counter.most_common(200)
+        most_common = counter.most_common(500)
 
         print(most_common)
 
@@ -84,7 +95,7 @@ class Camera:
 
         # todo: Works for now, but requires further tuning for reliability
         closest_object_in_meters = float(smallest_most_common) * self.sensor.get_option(rs.option.depth_units)
-        detection_z = closest_object_in_meters + 0.02
+        detection_z = closest_object_in_meters + 0.03
         print(detection_z)
 
         # Set appropriate distance for layer
@@ -99,10 +110,14 @@ class Camera:
 
         layer_z = self.conversion_service.get_layer_z(detection_z)
 
+        if layer_z is None:
+            return None, None, None
+
         return depth_colormap, detection_z, layer_z
 
     # Finds the dampers in the provided white to black image
     def find_dampers(self, image, detection_z, layer_z):
+        image = self.take_picture_with_threshold(layer_z)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         cv2.rectangle(gray, (0, 0), (640, 480), (0, 0, 0), 100)
         print("detection z: " + str(detection_z))

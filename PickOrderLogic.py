@@ -4,6 +4,7 @@ import HttpService
 
 import cv2
 import time
+import numpy as np
 
 
 # todo: still getting an array index out of range exception
@@ -110,7 +111,24 @@ class PickOrderLogic:
             while self.busy:
                 time.sleep(0.5)
 
-            image, detection_z, self.layer_z = self.camera.get_top_layer_image()
+            image, detection_z, layer_z = self.camera.get_top_layer_image()
+
+            if image is None or detection_z is None or layer_z is None:
+                blank_image = np.zeros(shape=[480, 640, 3], dtype=np.uint8)
+                cv2.putText(blank_image, "No dampers found, please check pallet.", (10, 40),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 255, 50))
+
+                while True:
+                    cv2.imshow('dempers', blank_image)
+                    key = cv2.waitKey(1)
+
+                    # and self.busy is False
+                    if key == ord('s'):
+                        break
+                continue
+
+            self.layer_z = layer_z
+
             self.slats = self.camera.find_slats(image, detection_z)
 
             if self.slats is not None:

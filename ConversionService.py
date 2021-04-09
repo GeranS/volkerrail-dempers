@@ -84,11 +84,14 @@ class ConversionService:
 
     def get_layer_z(self, detection_z):
         best_layer_height = 0
-        difference = 100
+        difference = 100.0
 
         for layer in self.layer_heights:
             if abs(detection_z - layer) < difference:
                 best_layer_height = layer
                 difference = abs(detection_z - layer)
+
+        if difference > 0.02:
+            return None
 
         return best_layer_height
