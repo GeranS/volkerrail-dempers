@@ -95,6 +95,8 @@ class RailCamera:
         self.user_input = input("Photo (p) or camera (c)")
         self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
+        self.gain = 0
+        self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
         self.brightness = 123
         self.cap.set(cv2.CAP_PROP_BRIGHTNESS, self.brightness)
         self.contrast = 85
@@ -173,21 +175,22 @@ if __name__ == "__main__":
         cv2.imshow('rail', output_image)
         cv2.imshow('normal', copy)
 
-        if RC.paste.state:
-            if old_trigger == 99:
-                trigger = 3
-                old_trigger = 3
+        if RC.paste is not None:
+            if RC.paste.state:
+                if old_trigger == 99:
+                    trigger = 3
+                    old_trigger = 3
 
-        if old_trigger == 3:
-            trigger = 99
-            old_trigger = 99
+            if old_trigger == 3:
+                trigger = 99
+                old_trigger = 99
 
-        # Convert the number to bytes in big-endian style
-        send_data = struct.pack(">h", trigger)
-        # print("Raw: ", send_data)
-
-        # Send the data
-        conn.send(send_data)
+        # # Convert the number to bytes in big-endian style
+        # send_data = struct.pack(">h", trigger)
+        # # print("Raw: ", send_data)
+        #
+        # # Send the data
+        # conn.send(send_data)
 
         key = cv2.waitKey(1)
 
