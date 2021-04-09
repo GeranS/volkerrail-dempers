@@ -5,6 +5,7 @@
 
 from RailDetection import RailCamera
 from PickOrderLogic import PickOrderLogic
+from ConversionService import ConversionService
 
 # todo: robot script needs to be updated after PLC communication is implemented
 # https://drive.google.com/drive/u/2/folders/1ibVbZg63A4amtCqi1D6-uhpEtu5gF_xN

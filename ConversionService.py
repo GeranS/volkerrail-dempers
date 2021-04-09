@@ -47,12 +47,17 @@ class ConversionService:
         return meters
 
     def convert_meters_to_pixels(self, meters, z):
-        pixels_per_meter = self.calibration_object_length_in_pixels / self.calibration_object_distance_in_meters
+        pixels_per_meter = self.calibration_object_length_in_pixels / self.calibration_object_length_in_meters
         relative_distance_difference = z / self.calibration_object_distance_in_meters
         pixels_per_meter = pixels_per_meter * relative_distance_difference
         pixels = int(meters * pixels_per_meter)
 
         return pixels
+
+    def scale_pixel_area(self, pixel_area, current_z, new_z):
+        relative = current_z / new_z
+        new_area = pixel_area * (relative ** 2)
+        return new_area
 
     # converts from camera pixel coordinates to robot coordinates
     # makes use of the calibration data

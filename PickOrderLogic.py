@@ -10,7 +10,7 @@ import time
 def find_first_single(dampers):
     for row in dampers:
         if len(row) == 1 and not row[0].get_moved():
-            return row[0]
+            return row[0], 2
 
         if len(row) == 0:
             continue
@@ -18,10 +18,13 @@ def find_first_single(dampers):
         i = 0
         while i < len(row):
             if row[i] is not None and not row[i].get_moved():
-                return row[i]
+                if i % 2 == 0:
+                    return row[i], 2
+                else:
+                    return row[i], 1
             i += 1
 
-    return None
+    return None, None
 
 
 class PickOrderLogic:
@@ -101,18 +104,17 @@ class PickOrderLogic:
 
         # Every iteration is one layer
         while True:
+            self.http_service.send_picture_command()
+            self.busy = True
+
+            while self.busy:
+                time.sleep(0.5)
+
             image, detection_z, self.layer_z = self.camera.get_top_layer_image()
             self.slats = self.camera.find_slats(image, detection_z)
 
             if self.slats is not None:
                 self.remove_slats()
-
-                self.http_service.send_safe_command()
-
-                self.busy = True
-
-                while self.busy:
-                    time.sleep(0.5)
 
                 image, detection_z, self.layer_z = self.camera.get_top_layer_image()
 
@@ -172,7 +174,7 @@ class PickOrderLogic:
 
         # todo: single damper detection/pickup and movement needs a left/right system
         if damper_1 is None:
-            damper_single = find_first_single(self.dampers)
+            damper_single, grab_mode = find_first_single(self.dampers)
 
             if damper_single is None:
                 return True
@@ -185,9 +187,13 @@ class PickOrderLogic:
 
             # offset because it's a single damper
             # todo: check offset
-            target_y = target_y - 0.05
+            if grab_mode == 1:
+                target_y = target_y + 0.05
+            elif grab_mode == 2:
+                target_y = target_y - 0.05
 
-            self.http_service.send_move_command(target_x, target_y, target_z)
+
+            self.http_service.send_move_command(target_x, target_y, target_z, grab_mode)
             return False
         elif damper_1 is not None and damper_2 is not None:
             damper_1.set_moved()
@@ -205,7 +211,7 @@ class PickOrderLogic:
             target_y = (damper_1_y + damper_2_y) / 2
             target_z = damper_1_z
 
-            self.http_service.send_move_command(target_x, target_y, target_z)
+            self.http_service.send_move_command(target_x, target_y, target_z, 0)
             return False
 
         return True
@@ -220,9 +226,8 @@ class PickOrderLogic:
                     if column[counter].get_moved() is False and column[counter + 1].get_moved() is False:
                         return column[counter], column[counter + 1]
                 counter += 2
-                if counter >= len(column)-1:
+                if counter >= len(column) - 1:
                     break
-
 
         return None, None
 
@@ -238,6 +243,13 @@ class PickOrderLogic:
 
             self.busy = True
             self.http_service.send_move_slats_command(robot_x, robot_y, robot_z)
+
+        while self.busy:
+            time.sleep(0.5)
+
+        self.http_service.send_picture_command()
+
+        self.busy = True
 
         while self.busy:
             time.sleep(0.5)

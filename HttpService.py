@@ -52,14 +52,19 @@ class HttpService:
         send_data = struct.pack(">h", 99)
         #self.plc_client.send(send_data)
 
-    def send_move_command(self, robot_x, robot_y, robot_z):
+    def send_move_command(self, robot_x, robot_y, robot_z, config):
+        # for config, 0 means both sides, 1 means left, 2 means right
         message_string = 'MOVE'
         self.send_command(message_string)
 
         # necessary to not overwhelm robot with messages, can be lower
         time.sleep(0.2)
 
-        message_string = '({x:.4f},{y:.4f},{z:.4f})'.format(x=robot_x, y=robot_y, z=robot_z)
+        message_string = '({x:.4f},{y:.4f},{z:.4f},{config})'.format(x=robot_x, y=robot_y, z=robot_z, config=config)
+        self.send_command(message_string)
+
+    def send_picture_command(self):
+        message_string = "PICTURE"
         self.send_command(message_string)
 
     def send_move_slats_command(self, robot_x, robot_y, robot_z):

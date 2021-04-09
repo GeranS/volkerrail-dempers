@@ -18,17 +18,25 @@ socket_name = "python_server"
 socket = socket_open(ip, port, socket_name)
 
 #Set poses
-pose_above_belt = pose_add(p[0.663, 0.445, 0.218, 0, 0, 0], hoeknaarAA(90))
-pose_on_belt_right = pose_add(p[0.663, 0.535, 0.101, 0, 0, 0], hoeknaarAA(90))
-pose_on_belt_left = pose_add(p[0.663, 0.390, 0.101, 0, 0, 0], hoeknaarAA(90))
-pose_safe = pose_add(p[0.663, 0.396, 0.400, 0, 0, 0], hoeknaarAA(90))
+pose_above_belt = pose_add(p[0.663, 0.390, 0.2, 0, 0, 0], hoeknaarAA(90))
+pose_on_belt_right = pose_add(p[0.663, 0.535, 0.125, 0, 0, 0], hoeknaarAA(90))
+pose_on_belt_left = pose_add(p[0.663, 0.390, 0.125, 0, 0, 0], hoeknaarAA(90))
+pose_safe = pose_add(p[0.556, -0.157, 0.337, 0, 0, 0], hoeknaarAA(90))
+pose_picture = pose_add(p[0.663, 0.396, 0.400, 0, 0, 0], hoeknaarAA(90))
 pose_slat_drop = pose_add(p[0.918,-0.209,0.230,0,0,0], hoeknaarAA(90))
+pose_arc_to_belt = pose_add(p[0.663,0.200,0.300,0,0,0], hoeknaarAA(90))
 
 pose_target = p[0,0,0,0,0,0]
+grab_config = 0
 
 current_move_thread = 0
 
 thread pick_up_and_move():
+
+  if pose_target == p[0,0,0,0,0,0]:
+    return None
+  end
+
   #Moves the arm to above the target pose
   pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
   movel(pose_above_target)
@@ -38,37 +46,72 @@ thread pick_up_and_move():
   movel(pose_on_target)
 
   #Activates suction
-  set_payload(6, [0,0,-0.1])
-  set_digital_out(0, True)
-  set_digital_out(1, True)
-  set_digital_out(2, True)
-  set_digital_out(3, True)
+  if grab_config == 0:
+    set_payload(6, [0,0,-0.1])
+    set_digital_out(0, True)
+    set_digital_out(1, True)
+    set_digital_out(2, True)
+    set_digital_out(3, True)
+  elif grab_config == 1:
+    set_payload(3, [0,0,-0.1])
+    set_digital_out(0, True)
+    set_digital_out(1, True)
+  elif grab_config == 2:
+    set_payload(3, [0,0,-0.1])
+    set_digital_out(2, True)
+    set_digital_out(3, True)
+  end
 
   #Moves arm back up
   movel(pose_above_target)
 
-  #Moves arm to above conveyor
-  movel(pose_above_belt)
+  if grab_config == 0:
+    #Moves arm to on the conveyor in a circular motion
+    #movec(pose_arc_to_belt, pose_on_belt_left, a=0.1, v=0.5, r=0.1, mode=0)
+    movel(pose_above_belt)
+    movel(pose_on_belt_left)
 
-  #Moves arms down to conveyor left side
-  movel(pose_on_belt_left)
-  set_digital_out(0, False)
-  set_digital_out(1, False)
+    #Drop left damper
+    set_digital_out(0, False)
+    set_digital_out(1, False)
+    set_payload(3,[0,0,-0.1])
 
-  set_payload(3,[0,0,-0.1])
+    #Drop right damper
+    movel(pose_on_belt_right)
+    set_digital_out(2, False)
+    set_digital_out(3, False)
 
-  #Moves arms down to conveyor left side
-  movel(pose_on_belt_right)
-  set_digital_out(2, False)
-  set_digital_out(3, False)
+    set_payload(0,[0,0,0])
+  elif grab_config == 1:
+    #Moves arm to on the conveyor in a circular motion
+    #movec(pose_arc_to_belt, pose_on_belt_left, a=0.1, v=0.5, r=0.1, mode=0)
+    #sleep(0.1)
 
-  set_payload(0,[0,0,0])
+    movel(pose_above_belt)
+    movel(pose_on_belt_left)
 
+    #Drop left damper
+    set_digital_out(0, False)
+    set_digital_out(1, False)
+
+    set_payload(0,[0,0,0])
+  elif grab_config == 2:
+    #Moves arm to on the conveyor in a circular motion
+    #movec(pose_arc_to_belt, pose_on_belt_right, a=0.1, v=0.5, r=0.1, mode=0)
+    #sleep(0.1)
+
+    movel(pose_above_belt)
+    movel(pose_on_belt_right)
+
+    #Drop left damper
+    set_digital_out(2, False)
+    set_digital_out(3, False)
+
+    set_payload(0,[0,0,0])
+  end
+  
   #Tells Python script that a damper has been placed so it can relay it to the PLC
   socket_send_string("PLACED", socket_name)
-
-  #Moves arm to above conveyor
-  movel(pose_above_belt)
 
   #Moves arm to safe pose
   movel(pose_safe)
@@ -79,6 +122,10 @@ end
 
 # Might be able to move multiple slats in one go
 thread remove_slat():
+  if pose_target == p[0,0,0,0,0,0]:
+    return None
+  end
+
   #Moves the arm to above the target pose
   pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
   movel(pose_above_target)
@@ -106,16 +153,17 @@ while (True):
   received = socket_read_string(socket_name)
   if received == "MOVE":
     #Expected format data string "?(x, y, z)"
-    pose_received = socket_read_ascii_float(3, socket_name)
+    pose_received = socket_read_ascii_float(4, socket_name)
     pose = p[pose_received[1], pose_received[2], pose_received[3], 0, 0, 0]
+    grab_config = pose_received[4]
 
     pose_target = pose_add(pose, hoeknaarAA(90))
 
     current_move_thread = run pick_up_and_move()
   elif received == "SLAT":
     #Expected format data string "?(x, y, z)"
-    pose_received = socket_read_ascii_float(3, socket_name)
-    pose = p[pose_received[1], pose_received[2], pose_received[3], 0, 0, 0]
+    pose_received_slat = socket_read_ascii_float(3, socket_name)
+    pose = p[pose_received_slat[1], pose_received_slat[2], pose_received_slat[3], 0, 0, 0]
 
     pose_target = pose_add(pose, hoeknaarAA(90))
 
@@ -132,6 +180,11 @@ while (True):
     #Finish current movement, move to safe, and end program
     movej(pose_safe)
     break
+  elif received == "PICTURE":
+    movel(pose_picture)
+    socket_send_string("DONE", socket_name)
   end
 end
+
+halt
 

@@ -67,12 +67,12 @@ class Camera:
         depth_frame = self.threshold_filter.process(depth_frame)
 
         depth_image = np.asanyarray(depth_frame.get_data())
-        depth_image = depth_image[80:400, 80:560]
+        depth_image = depth_image[120:360, 120:520]
         depth_image = depth_image[depth_image != 0]
 
         counter = collections.Counter(depth_image)
         # todo: determine most reliable most common set size, the more dampers there are the smaller it can be
-        most_common = counter.most_common(500)
+        most_common = counter.most_common(200)
 
         print(most_common)
 
@@ -84,7 +84,7 @@ class Camera:
 
         # todo: Works for now, but requires further tuning for reliability
         closest_object_in_meters = float(smallest_most_common) * self.sensor.get_option(rs.option.depth_units)
-        detection_z = closest_object_in_meters + 0.03
+        detection_z = closest_object_in_meters + 0.02
         print(detection_z)
 
         # Set appropriate distance for layer
@@ -145,7 +145,7 @@ class Camera:
 
                 cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-                min_length_damper = 0.05
+                min_length_damper = 0.06
                 max_length_damper = 0.06
 
                 min_width_damper = 0.12
@@ -187,7 +187,11 @@ class Camera:
                     print("max: " + str(max_width_damper) + " actual: " + str(w_meters))
                     continue
 
-                if amount_wide == 99 and amount_long == 1:
+                if amount_long > 2:
+                    print("amount long exceeds 2")
+                    continue
+
+                if amount_wide == 99 and amount_long == 2:
                     array_of_damper_locations.append(Damper(c_x, c_y, layer_z, False))
                     cv2.rectangle(image, (x, y), (x + w, y + h), (150, 150, 0), 2)
                 else:
@@ -239,6 +243,7 @@ class Camera:
         return dampers_sorted, image
 
     def find_slats(self, image, detection_z):
+        image_copy = image.copy()
         image_middle = image[120:360, 120: 520]
 
         big_kernel = np.ones((8, 8), np.uint8)
@@ -258,7 +263,7 @@ class Camera:
         iterations = 10
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(image, kernel, iterations=iterations)
-        kernel = np.ones((4, 4), np.uint8)
+        kernel = np.ones((5, 5), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
 
         while True:
@@ -278,14 +283,21 @@ class Camera:
 
         y_middle = 0
 
+        amount_of_slats_based_on_width = 0
+        average_damper_width = self.conversion_service.convert_meters_to_pixels(0.125, detection_z)
+
         for contour in contours:
             area = cv2.contourArea(contour)
 
             # todo: change to be dependant on detection_z
-            if area < 20000:
+            if area < self.conversion_service.scale_pixel_area(20000, 0.63, detection_z):
                 continue
 
             x, y, w, h = cv2.boundingRect(contour)
+
+            amount_of_slats_based_on_width = (w//average_damper_width) + 1
+            print("w: " + str(w) + " average_width: " + str(average_damper_width))
+            print("detection_z: " + str(detection_z))
 
             rotated_rect = cv2.minAreaRect(contour)
             box = cv2.boxPoints(rotated_rect)  # cv2.boxPoints(rect) for OpenCV 3.x
@@ -308,7 +320,7 @@ class Camera:
 
         inverted = blank_image
 
-        if cv2.countNonZero(cv2.cvtColor(inverted, cv2.COLOR_BGR2GRAY)) < 100:
+        if cv2.countNonZero(cv2.cvtColor(inverted, cv2.COLOR_BGR2GRAY)) < 50:
             return None
 
         inverted_edge = cv2.Canny(inverted, 30, 200)
@@ -318,8 +330,7 @@ class Camera:
         # x and y coordinates of slat edges
         edges = []
 
-
-        five_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.05, detection_z)
+        two_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.02, detection_z)
 
         for inv_con in inverted_contours:
             cv2.drawContours(inverted, [inv_con], 0, (255, 0, 0), 2)
@@ -329,10 +340,10 @@ class Camera:
             left_edge = (x, y_middle)
             right_edge = (x + w, y_middle)
 
-            if left_edge[0] - five_centimeters_in_pixels > x1:
+            if left_edge[0] - two_centimeters_in_pixels > x1:
                 edges.append(left_edge)
 
-            if right_edge[0] + five_centimeters_in_pixels < x2:
+            if right_edge[0] + two_centimeters_in_pixels < x2:
                 edges.append(right_edge)
 
         edge_columns = []
@@ -343,7 +354,7 @@ class Camera:
             else:
                 fits_in_existing_column = False
                 for edge_in_column in edge_columns:
-                    if abs(edge_in_column[0][0] - edge[0]) < 10:
+                    if abs(edge_in_column[0][0] - edge[0]) < 20:
                         edge_in_column.append(edge)
                         fits_in_existing_column = True
                         break
@@ -353,7 +364,7 @@ class Camera:
 
         sorted_edge_columns = sorted(edge_columns, key=lambda c: c[0][0])
 
-        four_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.04, detection_z)
+        three_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.03, detection_z)
 
         slats = []
         counter = 0
@@ -365,7 +376,7 @@ class Camera:
                     total_x += point[0]
                     total_y += point[1]
 
-                average_x = int(total_x / len(sorted_column)) - four_centimeters_in_pixels
+                average_x = int(total_x / len(sorted_column)) - three_centimeters_in_pixels
                 average_y = int(total_y / len(sorted_column))
 
                 slats.append((average_x, average_y))
@@ -376,7 +387,7 @@ class Camera:
                     total_x += point[0]
                     total_y += point[1]
 
-                average_x = int(total_x / len(sorted_column)) + four_centimeters_in_pixels
+                average_x = int(total_x / len(sorted_column)) + three_centimeters_in_pixels
                 average_y = int(total_y / len(sorted_column))
 
                 slats.append((average_x, average_y))
@@ -408,6 +419,16 @@ class Camera:
             # and self.busy is False
             if key == ord('s'):
                 break
+
+        print("Amount of slats based on width: " + str(amount_of_slats_based_on_width))
+
+        if int(counter - 1) != amount_of_slats_based_on_width:
+            print("Amount of slats found doesn't match expected amount, trying again.")
+            print("Expect: " + str(amount_of_slats_based_on_width) + " Got: " + str(counter - 1))
+            print(slats)
+
+            image, detection_z, _ = self.get_top_layer_image()
+            slats = self.find_slats(image, detection_z)
 
         return slats
 
