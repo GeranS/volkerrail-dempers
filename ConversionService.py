@@ -35,6 +35,26 @@ class ConversionService:
 
             self.layer_heights = calibration_json['layer_heights']
 
+    def reload_calibration_file(self):
+        with open("volkerrail-dempers/calibration.json", "r") as c:
+            calibration_json = json.load(c)
+        c.close()
+
+        self.calibration_object_length_in_meters = calibration_json['calibration_object_length_in_meters']
+        self.calibration_object_length_in_pixels = calibration_json['calibration_object_length_in_pixels']
+        self.calibration_object_distance_in_meters = calibration_json['calibration_object_distance_in_meters']
+        # (x, y, z)
+        self.calibration_coordinates_robot = calibration_json['calibration_coordinates_robot']
+        # (x, y, z)
+        self.calibration_pixel_coordinates_camera = calibration_json['calibration_pixel_coordinates_camera']
+
+        self.quarter_turn = calibration_json['quarter_turn']
+
+        self.x_inversion = calibration_json['x_inversion']
+        self.y_inversion = calibration_json['y_inversion']
+
+        self.layer_heights = calibration_json['layer_heights']
+
     # converts pixels at a given distance to meters
     # makes use of the calibration data
     # todo: check if pixel to meter conversion is different near edges of the view
@@ -63,6 +83,8 @@ class ConversionService:
     # makes use of the calibration data
     # todo: implement quarter turn, x inversion, and y inversion from calibration.json
     def convert_to_robot_coordinates(self, x, y, z):
+        self.reload_calibration_file()
+
         calibration_coordinates_camera = (
             self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[0], z),
             self.convert_pixels_to_meters(-self.calibration_pixel_coordinates_camera[1], z),
@@ -91,7 +113,7 @@ class ConversionService:
                 best_layer_height = layer
                 difference = abs(detection_z - layer)
 
-        if difference > 0.02:
+        if difference > 0.04:
             return None
 
         return best_layer_height

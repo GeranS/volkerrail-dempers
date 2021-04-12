@@ -7,7 +7,6 @@ import time
 import numpy as np
 
 
-# todo: still getting an array index out of range exception
 def find_first_single(dampers):
     for row in dampers:
         if len(row) == 1 and not row[0].get_moved():
@@ -32,6 +31,10 @@ class PickOrderLogic:
     def __init__(self):
         self.busy = False
         self.auto = False
+        self.paused = False
+        self.place_next = False
+        self.shutdown = False
+        self.image = np.zeros(shape=[480, 640, 3], dtype=np.uint8)
 
         self.amount_of_dampers_previous_layer = 0
 
@@ -46,54 +49,75 @@ class PickOrderLogic:
         self.http_service = HttpService.HttpService(self)
         self.conversion_service = ConversionService.ConversionService.get_instance()
 
-        # tells the robot to move to a safe position
-        time.sleep(1)
-        self.http_service.send_command('SAFE')
-
     def start_automatic_mode(self):
         self.auto = True
 
         while self.auto:
-            if self.slats is not None:
-                if self.layer_z is None:
-                    self.http_service.send_code_to_plc(0)
-                    print("Layer_z is None while slats isn't None. Can't remove slats without layer_z.")
-                    break
 
-                self.remove_slats()
+            time.sleep(0.1)
 
-            if self.dampers is None:
+            if self.shutdown:
+                self.http_service.send_shutdown_command()
+                break
+
+            if self.paused:
                 self.http_service.send_safe_command()
-                image, detection_z, layer_z = self.camera.get_top_layer_image()
-                self.layer_z = layer_z
-                slats = self.camera.find_slats(image, detection_z)
 
-                if slats is not None:
-                    self.slats = slats
-                    self.remove_slats()
-                else:
-                    array_of_dampers, original_image = self.camera.find_dampers(image, detection_z, layer_z)
-                    self.dampers = array_of_dampers
+            # Wait for the robot to be free and the program to unpause
+            if self.busy or self.paused:
+                print('Busy or paused.')
+                continue
 
-                    # Dampers will be None if the detection failed to find any dampers. Something is likely blocking
-                    # the view of the camera.
-                    if self.dampers is None:
+            if self.check_if_all_dampers_have_been_moved():
+                self.dampers = []
+
+            if len(self.slats) != 0:
+                print("Removing slats...")
+                self.remove_slats()
+                self.slats = []
+            elif len(self.slats) == 0 and len(self.dampers) == 0:
+                self.http_service.send_picture_command()
+                self.busy = True
+
+                while self.busy:
+                    time.sleep(0.5)
+
+                detection_z, layer_z = self.camera.get_top_layer_image()
+
+                if layer_z is None:
+                    print("Could not find matching layer_z, check pallet.")
+                    self.paused = True
+                    self.http_service.send_code_to_plc(0)
+                    continue
+
+                slats = self.camera.find_slats(layer_z)
+
+                if slats is None:
+                    print("No slats found. Finding dampers.")
+                    dampers, image = self.camera.find_dampers(detection_z, layer_z)
+                    self.dampers = dampers
+
+                    if dampers is None:
+                        print("Could not find dampers.")
+                        self.paused = True
                         self.http_service.send_code_to_plc(0)
-                        print("No dampers find, check pallet.")
-                        break
-            else:
-                no_picks_left = False
-
-                while no_picks_left is False:
-                    # Wait for robot to not be busy
-                    while self.busy:
-                        time.sleep(0.5)
-                    no_picks_left = self.choose_next_pick()
+                        continue
+                else:
+                    self.slats = slats
+            elif self.place_next:
+                print("Placing damper.")
+                self.choose_next_pick()
+                self.place_next = False
 
         self.auto = False
 
+
     # Mode for testing
     def start_testing_mode(self):
+
+        if self.auto:
+            return
+
         cv2.namedWindow('dempers')
 
         while True:
@@ -129,7 +153,7 @@ class PickOrderLogic:
 
             self.layer_z = layer_z
 
-            self.slats = self.camera.find_slats(image, detection_z)
+            self.slats = self.camera.find_slats(self.layer_z)
 
             if self.slats is not None:
                 self.remove_slats()
@@ -188,13 +212,16 @@ class PickOrderLogic:
 
     # todo: Not necessarily anything wrong with this method in general, but it looks ugly; please fix.
     def choose_next_pick(self):
+        self.busy = True
+
         damper_1, damper_2 = self.find_first_pair()
 
-        # todo: single damper detection/pickup and movement needs a left/right system
         if damper_1 is None:
             damper_single, grab_mode = find_first_single(self.dampers)
 
             if damper_single is None:
+                self.busy = False
+                self.dampers = []
                 return True
 
             damper_single.set_moved()
@@ -204,15 +231,13 @@ class PickOrderLogic:
                                                                                                 damper_single.get_z())
 
             # offset because it's a single damper
-            # todo: check offset
             if grab_mode == 1:
                 target_y = target_y + 0.05
             elif grab_mode == 2:
                 target_y = target_y - 0.05
 
-
             self.http_service.send_move_command(target_x, target_y, target_z, grab_mode)
-            return False
+            return
         elif damper_1 is not None and damper_2 is not None:
             damper_1.set_moved()
             damper_2.set_moved()
@@ -230,8 +255,16 @@ class PickOrderLogic:
             target_z = damper_1_z
 
             self.http_service.send_move_command(target_x, target_y, target_z, 0)
-            return False
+            return
 
+        self.busy = False
+        self.dampers = []
+
+    def check_if_all_dampers_have_been_moved(self):
+        for column in self.dampers:
+            for damper in column:
+                if damper.get_moved() is False:
+                    return False
         return True
 
     def find_first_pair(self):
@@ -251,16 +284,20 @@ class PickOrderLogic:
 
     def remove_slats(self):
         for slat in self.slats:
-            x, y = slat
-            robot_x, robot_y, robot_z = self.conversion_service.convert_to_robot_coordinates(x, y, self.layer_z)
+            if slat.moved is False:
+                x, y, z = slat.x, slat.y, slat.z
+                robot_x, robot_y, robot_z = self.conversion_service.convert_to_robot_coordinates(x, y, z)
 
-            robot_x = robot_x - 0.05
+                robot_x = robot_x - 0.05
 
-            while self.busy:
-                time.sleep(0.5)
+                while self.busy:
+                    time.sleep(0.5)
 
-            self.busy = True
-            self.http_service.send_move_slats_command(robot_x, robot_y, robot_z)
+                self.busy = True
+                self.http_service.send_move_slats_command(robot_x, robot_y, robot_z)
+                slat.moved = True
+
+        self.slats = []
 
         while self.busy:
             time.sleep(0.5)
@@ -274,3 +311,12 @@ class PickOrderLogic:
 
     def set_robot_done(self):
         self.busy = False
+
+    def pause_program(self):
+        self.paused = True
+
+    def unpause_program(self):
+        self.paused = False
+
+    def shutdown(self):
+        self.shutdown = True

@@ -29,6 +29,14 @@ class Damper:
         self.moved = True
 
 
+class Slat:
+    def __init__(self, x, y, z, moved):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.moved = moved
+
+
 class Camera:
     def __init__(self):
         self.conversion_service = ConversionService.get_instance()
@@ -98,25 +106,15 @@ class Camera:
         detection_z = closest_object_in_meters + 0.03
         print(detection_z)
 
-        # Set appropriate distance for layer
-        self.threshold_filter.set_option(rs.option.max_distance, detection_z)
-
-        frames = self.pipeline.wait_for_frames()
-
-        depth_frame = frames.get_depth_frame()
-        depth_frame = self.threshold_filter.process(depth_frame)
-
-        depth_colormap = np.asanyarray(self.colorizer.colorize(depth_frame).get_data())
-
         layer_z = self.conversion_service.get_layer_z(detection_z)
 
         if layer_z is None:
-            return None, None, None
+            return None, None
 
-        return depth_colormap, detection_z, layer_z
+        return detection_z, layer_z
 
     # Finds the dampers in the provided white to black image
-    def find_dampers(self, image, detection_z, layer_z):
+    def find_dampers(self, detection_z, layer_z):
         image = self.take_picture_with_threshold(layer_z)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         cv2.rectangle(gray, (0, 0), (640, 480), (0, 0, 0), 100)
@@ -136,15 +134,6 @@ class Camera:
         cv2.drawContours(image, contours, -1, (0, 0, 255), 2)
 
         array_of_damper_locations = []
-
-        while True:
-            cv2.imshow('dempers', dilation)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
 
         for contour in contours:
             area = cv2.contourArea(contour)
@@ -168,14 +157,6 @@ class Camera:
 
                 h_meters = self.conversion_service.convert_pixels_to_meters(h, detection_z)
                 w_meters = self.conversion_service.convert_pixels_to_meters(w, detection_z)
-
-                minimum_area_damper = self.conversion_service.convert_meters_to_pixels(min_length_damper, detection_z) \
-                                      * self.conversion_service.convert_meters_to_pixels(min_width_damper, detection_z)
-
-                #if area < minimum_area_damper:
-                #    print("skipped over blob because area")
-                #    print("area: " + str(area) + " is less than:" + str(minimum_area_damper))
-                #    continue
 
                 if h_meters < min_length_damper:
                     print("skipped over blob because length")
@@ -239,17 +220,11 @@ class Camera:
                             width_counter += 1
                         length_counter += 1
 
-        while True:
-            cv2.imshow('dempers', image)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
+        #cv2.imshow('dempers', image)
+        #cv2.waitKey(1)
 
         if len(array_of_damper_locations) == 0:
-            return None, image
+            return None
 
         array_of_damper_locations = self.remove_duplicates(array_of_damper_locations, layer_z)
 
@@ -257,8 +232,8 @@ class Camera:
 
         return dampers_sorted, image
 
-    def find_slats(self, image, detection_z):
-        image_copy = image.copy()
+    def find_slats(self, layer_z):
+        image = self.take_picture_with_threshold(layer_z - 0.01)
         image_middle = image[120:360, 120: 520]
 
         big_kernel = np.ones((8, 8), np.uint8)
@@ -266,14 +241,8 @@ class Camera:
 
         image[120:360, 120: 520] = image_middle
 
-        while True:
-            cv2.imshow('dempers', image)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
+        #cv2.imshow('dempers', image)
+        #cv2.waitKey(0)
 
         iterations = 10
         kernel = np.ones((5, 5), np.uint8)
@@ -281,14 +250,8 @@ class Camera:
         kernel = np.ones((5, 5), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
 
-        while True:
-            cv2.imshow('dempers', dilation)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
+        #cv2.imshow('dempers', dilation)
+        #cv2.waitKey(0)
 
         edged = cv2.Canny(dilation, 30, 200)
 
@@ -299,20 +262,20 @@ class Camera:
         y_middle = 0
 
         amount_of_slats_based_on_width = 0
-        average_damper_width = self.conversion_service.convert_meters_to_pixels(0.125, detection_z)
+        average_damper_width = self.conversion_service.convert_meters_to_pixels(0.125, layer_z)
 
         for contour in contours:
             area = cv2.contourArea(contour)
 
             # todo: change to be dependant on detection_z
-            if area < self.conversion_service.scale_pixel_area(20000, 0.63, detection_z):
+            if area < self.conversion_service.scale_pixel_area(10000, 0.63, layer_z):
                 continue
 
             x, y, w, h = cv2.boundingRect(contour)
 
-            amount_of_slats_based_on_width = (w//average_damper_width) + 1
+            amount_of_slats_based_on_width = (w // average_damper_width) + 1
             print("w: " + str(w) + " average_width: " + str(average_damper_width))
-            print("detection_z: " + str(detection_z))
+            print("detection_z: " + str(layer_z))
 
             rotated_rect = cv2.minAreaRect(contour)
             box = cv2.boxPoints(rotated_rect)  # cv2.boxPoints(rect) for OpenCV 3.x
@@ -325,6 +288,9 @@ class Camera:
             y2 = y + h
 
             y_middle = int((y + y + h) / 2)
+
+        #cv2.imshow('dempers', dilation)
+        #cv2.waitKey(0)
 
         if x1 is None:
             return None
@@ -345,7 +311,7 @@ class Camera:
         # x and y coordinates of slat edges
         edges = []
 
-        two_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.02, detection_z)
+        two_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.02, layer_z)
 
         for inv_con in inverted_contours:
             cv2.drawContours(inverted, [inv_con], 0, (255, 0, 0), 2)
@@ -379,7 +345,7 @@ class Camera:
 
         sorted_edge_columns = sorted(edge_columns, key=lambda c: c[0][0])
 
-        three_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.03, detection_z)
+        three_centimeters_in_pixels = self.conversion_service.convert_meters_to_pixels(0.03, layer_z)
 
         slats = []
         counter = 0
@@ -394,7 +360,7 @@ class Camera:
                 average_x = int(total_x / len(sorted_column)) - three_centimeters_in_pixels
                 average_y = int(total_y / len(sorted_column))
 
-                slats.append((average_x, average_y))
+                slats.append(Slat(average_x, average_y, layer_z, False))
             elif counter == len(sorted_edge_columns) - 1:
                 total_x, total_y = 0, 0
 
@@ -405,7 +371,7 @@ class Camera:
                 average_x = int(total_x / len(sorted_column)) + three_centimeters_in_pixels
                 average_y = int(total_y / len(sorted_column))
 
-                slats.append((average_x, average_y))
+                slats.append(Slat(average_x, average_y, layer_z, False))
             elif counter % 2 == 1:
                 total_x, total_y = 0, 0
 
@@ -420,30 +386,21 @@ class Camera:
                 average_x = int(total_x / (len(sorted_column) + len(sorted_edge_columns[counter + 1])))
                 average_y = int(total_y / (len(sorted_column) + len(sorted_edge_columns[counter + 1])))
 
-                slats.append((average_x, average_y))
+                slats.append(Slat(average_x, average_y, layer_z, False))
             counter += 1
 
         for slat in slats:
-            cv2.drawMarker(inverted, (slat[0], slat[1]), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=2)
+            cv2.drawMarker(inverted, (slat.x, slat.y), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=2)
 
-        while True:
-            cv2.imshow('dempers', inverted)
-
-            key = cv2.waitKey(1)
-
-            # and self.busy is False
-            if key == ord('s'):
-                break
-
-        print("Amount of slats based on width: " + str(amount_of_slats_based_on_width))
+        #cv2.imshow('dempers', inverted)
+        #cv2.waitKey(0)
 
         if int(counter - 1) != amount_of_slats_based_on_width:
             print("Amount of slats found doesn't match expected amount, trying again.")
             print("Expect: " + str(amount_of_slats_based_on_width) + " Got: " + str(counter - 1))
             print(slats)
 
-            image, detection_z, _ = self.get_top_layer_image()
-            slats = self.find_slats(image, detection_z)
+            slats = self.find_slats(layer_z)
 
         return slats
 

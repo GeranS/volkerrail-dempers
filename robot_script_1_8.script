@@ -175,7 +175,7 @@ while (True):
   elif received == "STOP":
     #Stop robot in place
     kill current_move_thread
-    stopj(2)
+    stopj(0.5)
   elif received == "END":
     #Finish current movement, move to safe, and end program
     movej(pose_safe)

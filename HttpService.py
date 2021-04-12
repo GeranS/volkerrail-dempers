@@ -2,6 +2,7 @@ import socket
 import time
 import struct
 import _thread
+from enum import Enum
 
 robot_client_ip = "192.168.0.3"
 robot_client_port = 22
@@ -11,23 +12,28 @@ plc_client_port = 2000
 
 
 # todo: Allow for reconnections and for the robot to be started first
-# todo: Add functionality for communicating with PLC
 class HttpService:
     def __init__(self, robot_state):
         self.robot_state = robot_state
-        self.server_socket = socket.socket()
 
         host = socket.gethostname()
         port = 8000
+        port_two = 9000
 
+        # Socket for robot communication
+        self.server_socket = socket.socket()
         self.server_socket.bind((host, port))
         self.server_socket.listen(2)
 
+        # Socket for PLC communication
+        self.socket_plc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.socket_plc.bind((host, port_two))
+        # self.socket_plc.listen(2)
+
         self.robot_client = None
-        self.plc_client = None
 
         self.wait_for_robot_connection()
-        # self.connect_to_plc()
+        self.connect_to_plc()
 
     def wait_for_robot_connection(self):
         print("Waiting for robot to connect...")
@@ -39,18 +45,20 @@ class HttpService:
         while True:
             print("Connecting to PLC...")
             try:
-                self.server_socket.connect((plc_client_ip, plc_client_port))
+                self.socket_plc.connect((plc_client_ip, plc_client_port))
+                _thread.start_new_thread(self.listen_for_plc_messages, ())
                 break
-            except:
+            except Exception as e:
                 print("Failed to connect to PLC. Trying again in one second.")
+                print(e)
                 time.sleep(1)
 
     def send_code_to_plc(self, code):
         send_data = struct.pack(">h", code)
         print("message to PLC: " + str(code))
-        #self.plc_client.send(send_data)
+        self.socket_plc.send(send_data)
         send_data = struct.pack(">h", 99)
-        #self.plc_client.send(send_data)
+        self.socket_plc.send(send_data)
 
     def send_move_command(self, robot_x, robot_y, robot_z, config):
         # for config, 0 means both sides, 1 means left, 2 means right
@@ -81,6 +89,14 @@ class HttpService:
         message_string = 'SAFE'
         self.send_command(message_string)
 
+    def send_stop_command(self):
+        message_string = 'STOP'
+        self.send_command(message_string)
+
+    def send_shutdown_command(self):
+        message_string = 'END'
+        self.send_command(message_string)
+
     def send_command(self, message_string):
         print('message to robot: ' + message_string)
         self.robot_client.send(message_string.encode())
@@ -89,10 +105,15 @@ class HttpService:
     def listen_for_plc_messages(self):
         while True:
             try:
-                message = self.plc_client.recv(1024)
+                message = self.socket_plc.recv(1024)
+                print('plc')
             except ConnectionResetError as e:
                 print("Error while receiving data from PLC. Error message: ", str(e))
                 break
+            except Exception as e:
+                print(e)
+
+            print('plc')
 
             if not message:
                 break
@@ -100,20 +121,37 @@ class HttpService:
             if len(message) == 2:
                 code = int(struct.unpack(">h", message[0:2])[0])
 
-                if code == 0:
+                print("code from plc: " + str(code))
+
+                if code == 0:  # Start auto
                     # Start auto mode
                     if self.robot_state.auto is False:
                         self.robot_state.start_automatic_mode()
-                elif code == 1:
-                    print("pause and go to safe")
+
+                elif code == 1:  # Move to safe
+                    self.robot_state.pause_program()
+
+                elif code == 2:  # Continue
+                    self.robot_state.unpause_program()
+
+                elif code == 3:  # Place damper
+                    print('Placing damper...')
+                    self.robot_state.place_next = True
+
+                elif code == 4:  # Emergency safe
+                    print('Stopping...')
+                    self.send_stop_command()
+
+                elif code == 5:  # Shut down
+                    print('Shutting down...')
+                    self.robot_state.shutdown()
 
             else:
                 # Show error message when the number of bytes is not 2
                 print("Received too little or too much bytes. 2 needed, received: ", len(message))
 
-        self.plc_client.close()
+        self.server_socket.close()
 
-    # todo: second listener for communication with PLC
     def listen_for_robot_messages(self):
         while True:
             try:
@@ -130,6 +168,6 @@ class HttpService:
             if str(message) == 'DONE':
                 self.robot_state.set_robot_done()
             elif str(message) == 'PLACED':
-                self.send_code_to_plc(2)
+                self.send_code_to_plc(2)  # Damper placed
 
         self.robot_client.close()
