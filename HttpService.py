@@ -116,7 +116,7 @@ class HttpService:
             if len(message) == 2:
                 code = int(struct.unpack(">h", message[0:2])[0])
 
-                print("code from plc: " + str(code))
+                print("message from plc: " + str(code))
 
                 if code == 0:  # Start auto
                     # Start auto mode
@@ -160,7 +160,7 @@ class HttpService:
             if not message:
                 break
 
-            print('from robot:' + str(message))
+            print('message from robot:' + str(message))
 
             if str(message) == 'DONE':
                 self.robot_state.set_robot_done()

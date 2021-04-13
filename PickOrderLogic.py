@@ -1,10 +1,12 @@
 import Camera
 import ConversionService
 import HttpService
+from RailDetection import RailCamera
 
 import cv2
 import time
 import numpy as np
+import _thread
 
 
 def find_first_single(dampers):
@@ -50,6 +52,8 @@ class PickOrderLogic:
         self.http_service = HttpService.HttpService(self)
         self.conversion_service = ConversionService.ConversionService.get_instance()
 
+        RailCamera.RailCamera(self.http_service)
+
     def start_automatic_mode(self):
         self.auto = True
 
@@ -68,7 +72,7 @@ class PickOrderLogic:
 
             # Wait for the robot to be free and the program to unpause
             if self.busy or self.paused:
-                print('Busy or paused.')
+                #print('Busy or paused.')
                 continue
 
             self.paused_sent_safe = False
