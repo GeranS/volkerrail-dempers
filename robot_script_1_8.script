@@ -39,11 +39,11 @@ thread pick_up_and_move():
 
   #Moves the arm to above the target pose
   pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
-  movel(pose_above_target)
+  movel(pose_above_target, a=2, v=2, t=0, r=0)
 
   #Moves the arm to be on top of the target dampers
   pose_on_target = pose_add(pose_target, p[0,0,0,0,0,0])
-  movel(pose_on_target)
+  movel(pose_on_target, a=2, v=2, t=0, r=0)
 
   #Activates suction
   if grab_config == 0:
@@ -68,7 +68,7 @@ thread pick_up_and_move():
   if grab_config == 0:
     #Moves arm to on the conveyor in a circular motion
     #movec(pose_arc_to_belt, pose_on_belt_left, a=0.1, v=0.5, r=0.1, mode=0)
-    movel(pose_above_belt)
+    movel(pose_above_belt, a=0.7, v=2, t=0, r=0)
     movel(pose_on_belt_left)
 
     #Drop left damper
@@ -114,7 +114,7 @@ thread pick_up_and_move():
   socket_send_string("PLACED", socket_name)
 
   #Moves arm to safe pose
-  movel(pose_safe)
+  movel(pose_safe, a=2, v=2, t=0, r=0)
 
   socket_send_string("DONE", socket_name)
   current_move_thread = 0
@@ -128,25 +128,24 @@ thread remove_slat():
 
   #Moves the arm to above the target pose
   pose_above_target = pose_add(pose_target, p[0, 0, 0.2, 0, 0, 0])
-  movel(pose_above_target)
+  movel(pose_above_target, a=2, v=2, t=0, r=0)
 
   #Moves the arm to be on top of the target slat
   pose_on_target = pose_add(pose_target, p[0,0,0,0,0,0])
-  movel(pose_on_target)
+  movel(pose_on_target, a=2, v=2, t=0, r=0)
 
   set_digital_out(1, True)
   set_digital_out(3, True)
 
-  movel(pose_above_target)
+  movel(pose_above_target, a=2, v=2, t=0, r=0.05)
 
-  movel(pose_slat_drop)
+  movel(pose_slat_drop, a=2, v=2, t=0, r=0)
 
   set_digital_out(1, False)
   set_digital_out(3, False)
 
   current_move_thread = 0
   socket_send_string("DONE", socket_name)
-  
 end
 
 while (True):
@@ -181,7 +180,7 @@ while (True):
     movej(pose_safe)
     break
   elif received == "PICTURE":
-    movel(pose_picture)
+    movel(pose_picture, a=2, v=2, t=0, r=0)
     socket_send_string("DONE", socket_name)
   end
 end

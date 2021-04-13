@@ -81,14 +81,33 @@ class ConversionService:
 
     # converts from camera pixel coordinates to robot coordinates
     # makes use of the calibration data
-    # todo: implement quarter turn, x inversion, and y inversion from calibration.json
     def convert_to_robot_coordinates(self, x, y, z):
         self.reload_calibration_file()
 
+        calibration_pixel_coordinates_camera_x = self.calibration_pixel_coordinates_camera[0]
+        calibration_pixel_coordinates_camera_y = self.calibration_pixel_coordinates_camera[1]
+        calibration_pixel_coordinates_camera_z = self.calibration_pixel_coordinates_camera[2]
+
+        if self.quarter_turn:
+            temp_hold = calibration_pixel_coordinates_camera_x
+            calibration_pixel_coordinates_camera_x = calibration_pixel_coordinates_camera_y
+            calibration_pixel_coordinates_camera_y = temp_hold
+
+        if self.x_inversion:
+            calibration_pixel_coordinates_camera_x = -calibration_pixel_coordinates_camera_x
+
+        if self.y_inversion:
+            calibration_pixel_coordinates_camera_y = -calibration_pixel_coordinates_camera_y
+
         calibration_coordinates_camera = (
-            self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[0], z),
-            self.convert_pixels_to_meters(-self.calibration_pixel_coordinates_camera[1], z),
-            self.calibration_pixel_coordinates_camera[2])
+            self.convert_pixels_to_meters(calibration_pixel_coordinates_camera_x, z),
+            self.convert_pixels_to_meters(calibration_pixel_coordinates_camera_y, z),
+            calibration_pixel_coordinates_camera_z)
+
+        #calibration_coordinates_camera = (
+        #    self.convert_pixels_to_meters(self.calibration_pixel_coordinates_camera[0], z),
+        #    self.convert_pixels_to_meters(-self.calibration_pixel_coordinates_camera[1], z),
+        #    self.calibration_pixel_coordinates_camera[2])
 
         x_difference = calibration_coordinates_camera[0] - self.calibration_coordinates_robot[0]
         y_difference = calibration_coordinates_camera[1] - self.calibration_coordinates_robot[1]
@@ -96,8 +115,19 @@ class ConversionService:
         camera_height = calibration_coordinates_camera[2] + self.calibration_coordinates_robot[2]
         new_z = camera_height - z
 
+        if self.quarter_turn:
+            temp_hold = x
+            x = y
+            y = temp_hold
+
+        if self.x_inversion:
+            x = -x
+
+        if self.y_inversion:
+            y = -y
+
         x_meters = self.convert_pixels_to_meters(x, z)
-        y_meters = self.convert_pixels_to_meters(-y, z)
+        y_meters = self.convert_pixels_to_meters(y, z)
 
         new_x = x_meters - x_difference
         new_y = y_meters - y_difference

@@ -13,21 +13,6 @@ class Damper:
         self.z = z
         self.moved = moved
 
-    def get_x(self):
-        return self.x
-
-    def get_y(self):
-        return self.y
-
-    def get_z(self):
-        return self.z
-
-    def get_moved(self):
-        return self.moved
-
-    def set_moved(self):
-        self.moved = True
-
 
 class Slat:
     def __init__(self, x, y, z, moved):
@@ -232,7 +217,7 @@ class Camera:
 
         return dampers_sorted, image
 
-    def find_slats(self, layer_z):
+    def find_slats(self, layer_z, retry=True):
         image = self.take_picture_with_threshold(layer_z - 0.01)
         image_middle = image[120:360, 120: 520]
 
@@ -395,12 +380,15 @@ class Camera:
         #cv2.imshow('dempers', inverted)
         #cv2.waitKey(0)
 
-        if int(counter - 1) != amount_of_slats_based_on_width:
+        if int(counter - 1) != amount_of_slats_based_on_width and retry:
             print("Amount of slats found doesn't match expected amount, trying again.")
             print("Expect: " + str(amount_of_slats_based_on_width) + " Got: " + str(counter - 1))
             print(slats)
 
-            slats = self.find_slats(layer_z)
+            slats = self.find_slats(layer_z, retry=False)
+
+            if len(slats) != counter -1:
+                return None
 
         return slats
 
@@ -411,9 +399,9 @@ class Camera:
 
         while len(sorted_by_x) != 0:
             current_column = []
-            current_column_x = sorted_by_x[0].get_x()
+            current_column_x = sorted_by_x[0].x
             while True:
-                if len(sorted_by_x) > 0 and current_column_x - 30 < sorted_by_x[0].get_x() < current_column_x + 30:
+                if len(sorted_by_x) > 0 and current_column_x - 30 < sorted_by_x[0].x < current_column_x + 30:
                     current_column.append(sorted_by_x[0])
                     sorted_by_x.remove(sorted_by_x[0])
                     continue
@@ -434,7 +422,7 @@ class Camera:
 
         for row in damper_grid:
             for damper in row:
-                y_list.append(damper.get_y())
+                y_list.append(damper.y)
 
         y_rows = []
 
@@ -466,7 +454,7 @@ class Camera:
             for y_row in sorted_y_rows:
                 found_match = False
                 for damper in column:
-                    if abs(y_row - damper.get_y()) < 10:
+                    if abs(y_row - damper.y) < 10:
                         new_column[counter] = damper
                         found_match = True
 
@@ -488,8 +476,8 @@ class Camera:
             j = 0
             while j < len(unsorted):
                 if i != j:
-                    if abs(unsorted[i].get_x() - unsorted[j].get_x()) < four_cm and abs(
-                            unsorted[i].get_y() - unsorted[j].get_y()) < four_cm:
+                    if abs(unsorted[i].x - unsorted[j].x) < four_cm and abs(
+                            unsorted[i].y - unsorted[j].y) < four_cm:
                         unsorted.remove(unsorted[j])
                         print("duplicate removed")
                 j += 1

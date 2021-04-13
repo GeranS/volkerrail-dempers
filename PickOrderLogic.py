@@ -9,7 +9,7 @@ import numpy as np
 
 def find_first_single(dampers):
     for row in dampers:
-        if len(row) == 1 and not row[0].get_moved():
+        if len(row) == 1 and not row[0].moved:
             return row[0], 2
 
         if len(row) == 0:
@@ -17,7 +17,7 @@ def find_first_single(dampers):
 
         i = 0
         while i < len(row):
-            if row[i] is not None and not row[i].get_moved():
+            if row[i] is not None and not row[i].moved:
                 if i % 2 == 0:
                     return row[i], 2
                 else:
@@ -34,6 +34,7 @@ class PickOrderLogic:
         self.paused = False
         self.place_next = False
         self.shutdown = False
+        self.paused_sent_safe = False
         self.image = np.zeros(shape=[480, 640, 3], dtype=np.uint8)
 
         self.amount_of_dampers_previous_layer = 0
@@ -61,12 +62,16 @@ class PickOrderLogic:
                 break
 
             if self.paused:
-                self.http_service.send_safe_command()
+                if self.paused_sent_safe is False:
+                    self.http_service.send_safe_command()
+                    self.paused_sent_safe = True
 
             # Wait for the robot to be free and the program to unpause
             if self.busy or self.paused:
                 print('Busy or paused.')
                 continue
+
+            self.paused_sent_safe = False
 
             if self.check_if_all_dampers_have_been_moved():
                 self.dampers = []
@@ -100,7 +105,7 @@ class PickOrderLogic:
                     if dampers is None:
                         print("Could not find dampers.")
                         self.paused = True
-                        self.http_service.send_code_to_plc(0)
+                        self.http_service.send_code_to_plc(1)  # Out of dampers
                         continue
                 else:
                     self.slats = slats
@@ -160,7 +165,7 @@ class PickOrderLogic:
 
                 image, detection_z, self.layer_z = self.camera.get_top_layer_image()
 
-            self.dampers, original_image = self.camera.find_dampers(image, detection_z, self.layer_z)
+            self.dampers, original_image = self.camera.find_dampers(detection_z, self.layer_z)
             image = original_image.copy()
 
             while True:
@@ -183,12 +188,12 @@ class PickOrderLogic:
                 for row in self.dampers:
                     for damper in row:
                         if damper is not None:
-                            if damper.get_moved():
-                                cv2.putText(image, str(damper_count) + " moved", (damper.get_x(), damper.get_y()),
+                            if damper.moved:
+                                cv2.putText(image, str(damper_count) + " moved", (damper.x, damper.y),
                                             cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                                             (255, 0, 0))
                             else:
-                                cv2.putText(image, str(damper_count), (damper.get_x(), damper.get_y()),
+                                cv2.putText(image, str(damper_count), (damper.x, damper.y),
                                             cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                                             (255, 0, 0))
                             damper_count += 1
@@ -226,9 +231,9 @@ class PickOrderLogic:
 
             damper_single.set_moved()
 
-            target_x, target_y, target_z = self.conversion_service.convert_to_robot_coordinates(damper_single.get_x(),
-                                                                                                damper_single.get_y(),
-                                                                                                damper_single.get_z())
+            target_x, target_y, target_z = self.conversion_service.convert_to_robot_coordinates(damper_single.x,
+                                                                                                damper_single.y,
+                                                                                                damper_single.z)
 
             # offset because it's a single damper
             if grab_mode == 1:
@@ -242,13 +247,13 @@ class PickOrderLogic:
             damper_1.set_moved()
             damper_2.set_moved()
 
-            damper_1_x, damper_1_y, damper_1_z = self.conversion_service.convert_to_robot_coordinates(damper_1.get_x(),
-                                                                                                      damper_1.get_y(),
-                                                                                                      damper_1.get_z())
+            damper_1_x, damper_1_y, damper_1_z = self.conversion_service.convert_to_robot_coordinates(damper_1.x,
+                                                                                                      damper_1.y,
+                                                                                                      damper_1.z)
 
-            damper_2_x, damper_2_y, _ = self.conversion_service.convert_to_robot_coordinates(damper_2.get_x(),
-                                                                                             damper_2.get_y(),
-                                                                                             damper_2.get_z())
+            damper_2_x, damper_2_y, _ = self.conversion_service.convert_to_robot_coordinates(damper_2.x,
+                                                                                             damper_2.y,
+                                                                                             damper_2.z)
 
             target_x = (damper_1_x + damper_2_x) / 2
             target_y = (damper_1_y + damper_2_y) / 2
@@ -263,7 +268,7 @@ class PickOrderLogic:
     def check_if_all_dampers_have_been_moved(self):
         for column in self.dampers:
             for damper in column:
-                if damper.get_moved() is False:
+                if damper.moved is False:
                     return False
         return True
 
@@ -274,7 +279,7 @@ class PickOrderLogic:
             counter = 0
             while True:
                 if column[counter] is not None and column[counter + 1] is not None:
-                    if column[counter].get_moved() is False and column[counter + 1].get_moved() is False:
+                    if column[counter].moved is False and column[counter + 1].moved is False:
                         return column[counter], column[counter + 1]
                 counter += 2
                 if counter >= len(column) - 1:

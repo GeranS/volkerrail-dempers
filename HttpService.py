@@ -1,8 +1,8 @@
 import socket
+import sys
 import time
 import struct
 import _thread
-from enum import Enum
 
 robot_client_ip = "192.168.0.3"
 robot_client_port = 22
@@ -18,17 +18,14 @@ class HttpService:
 
         host = socket.gethostname()
         port = 8000
-        port_two = 9000
 
         # Socket for robot communication
-        self.server_socket = socket.socket()
-        self.server_socket.bind((host, port))
-        self.server_socket.listen(2)
+        self.robot_socket = socket.socket()
+        self.robot_socket.bind((host, port))
+        self.robot_socket.listen(2)
 
         # Socket for PLC communication
         self.socket_plc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.socket_plc.bind((host, port_two))
-        # self.socket_plc.listen(2)
 
         self.robot_client = None
 
@@ -37,7 +34,7 @@ class HttpService:
 
     def wait_for_robot_connection(self):
         print("Waiting for robot to connect...")
-        conn, _ = self.server_socket.accept()
+        conn, _ = self.robot_socket.accept()
         self.robot_client = conn
         _thread.start_new_thread(self.listen_for_robot_messages, ())
 
@@ -106,14 +103,12 @@ class HttpService:
         while True:
             try:
                 message = self.socket_plc.recv(1024)
-                print('plc')
             except ConnectionResetError as e:
                 print("Error while receiving data from PLC. Error message: ", str(e))
                 break
             except Exception as e:
                 print(e)
-
-            print('plc')
+                break
 
             if not message:
                 break
@@ -129,10 +124,11 @@ class HttpService:
                         self.robot_state.start_automatic_mode()
 
                 elif code == 1:  # Move to safe
-                    self.robot_state.pause_program()
+                    self.robot_state.paused = True
+                    self.send_safe_command()
 
                 elif code == 2:  # Continue
-                    self.robot_state.unpause_program()
+                    self.robot_state.paused = False
 
                 elif code == 3:  # Place damper
                     print('Placing damper...')
@@ -145,12 +141,13 @@ class HttpService:
                 elif code == 5:  # Shut down
                     print('Shutting down...')
                     self.robot_state.shutdown()
+                    sys.exit()
 
             else:
                 # Show error message when the number of bytes is not 2
                 print("Received too little or too much bytes. 2 needed, received: ", len(message))
 
-        self.server_socket.close()
+        self.robot_socket.close()
 
     def listen_for_robot_messages(self):
         while True:

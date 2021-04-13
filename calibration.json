@@ -5,7 +5,7 @@
   "calibration_coordinates_robot": [0.573, -0.122, 0.081],
   "calibration_pixel_coordinates_camera": [333, 193, 0.690],
   "x_inversion": false,
-  "y_inversion": false,
+  "y_inversion": true,
   "quarter_turn": false,
   "layer_heights": [0.58, 0.64, 0.705]
 }
