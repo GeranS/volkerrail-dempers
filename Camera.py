@@ -215,10 +215,10 @@ class Camera:
 
         dampers_sorted = self.split_unsorted_array_into_columns(array_of_damper_locations)
 
-        return dampers_sorted, image
+        return dampers_sorted
 
     def find_slats(self, layer_z, retry=True):
-        image = self.take_picture_with_threshold(layer_z - 0.01)
+        image = self.take_picture_with_threshold(layer_z - 0.005)
         image_middle = image[120:360, 120: 520]
 
         big_kernel = np.ones((8, 8), np.uint8)
@@ -387,7 +387,7 @@ class Camera:
 
             slats = self.find_slats(layer_z, retry=False)
 
-            if len(slats) != counter -1:
+            if len(slats) != int(counter - 1):
                 return None
 
         return slats

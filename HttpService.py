@@ -4,7 +4,7 @@ import time
 import struct
 import _thread
 
-robot_client_ip = "192.168.0.3"
+robot_client_ip = "192.168.0.4"
 robot_client_port = 22
 
 plc_client_ip = "192.168.0.1"

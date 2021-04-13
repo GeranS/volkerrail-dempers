@@ -99,7 +99,7 @@ class PickOrderLogic:
 
                 if slats is None:
                     print("No slats found. Finding dampers.")
-                    dampers, image = self.camera.find_dampers(detection_z, layer_z)
+                    dampers = self.camera.find_dampers(detection_z, layer_z)
                     self.dampers = dampers
 
                     if dampers is None:
@@ -219,9 +219,9 @@ class PickOrderLogic:
     def choose_next_pick(self):
         self.busy = True
 
-        damper_1, damper_2 = self.find_first_pair()
+        damper_pair = self.find_first_pair()
 
-        if damper_1 is None:
+        if damper_pair is None:
             damper_single, grab_mode = find_first_single(self.dampers)
 
             if damper_single is None:
@@ -229,7 +229,7 @@ class PickOrderLogic:
                 self.dampers = []
                 return True
 
-            damper_single.set_moved()
+            damper_single.moved = True
 
             target_x, target_y, target_z = self.conversion_service.convert_to_robot_coordinates(damper_single.x,
                                                                                                 damper_single.y,
@@ -243,9 +243,11 @@ class PickOrderLogic:
 
             self.http_service.send_move_command(target_x, target_y, target_z, grab_mode)
             return
-        elif damper_1 is not None and damper_2 is not None:
-            damper_1.set_moved()
-            damper_2.set_moved()
+        elif damper_pair is not None:
+            damper_1, damper_2 = damper_pair
+
+            damper_1.moved = True
+            damper_2.moved = True
 
             damper_1_x, damper_1_y, damper_1_z = self.conversion_service.convert_to_robot_coordinates(damper_1.x,
                                                                                                       damper_1.y,
@@ -280,12 +282,12 @@ class PickOrderLogic:
             while True:
                 if column[counter] is not None and column[counter + 1] is not None:
                     if column[counter].moved is False and column[counter + 1].moved is False:
-                        return column[counter], column[counter + 1]
+                        return (column[counter], column[counter + 1])
                 counter += 2
                 if counter >= len(column) - 1:
                     break
 
-        return None, None
+        return None
 
     def remove_slats(self):
         for slat in self.slats:
