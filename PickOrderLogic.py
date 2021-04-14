@@ -72,7 +72,6 @@ class PickOrderLogic:
 
             # Wait for the robot to be free and the program to unpause
             if self.busy or self.paused:
-                #print('Busy or paused.')
                 continue
 
             self.paused_sent_safe = False
@@ -96,7 +95,9 @@ class PickOrderLogic:
                 if layer_z is None:
                     print("Could not find matching layer_z, check pallet.")
                     self.paused = True
-                    self.http_service.send_code_to_plc(0)
+                    self.http_service.send_code_to_plc(0)  # Error
+                    self.slats = []
+                    self.dampers = []
                     continue
 
                 slats = self.camera.find_slats(layer_z)
@@ -104,13 +105,17 @@ class PickOrderLogic:
                 if slats is None:
                     print("No slats found. Finding dampers.")
                     dampers = self.camera.find_dampers(detection_z, layer_z)
-                    self.dampers = dampers
 
                     if dampers is None:
                         print("Could not find dampers.")
                         self.paused = True
-                        self.http_service.send_code_to_plc(1)  # Out of dampers
+                        if self.layer_z == 0.77:
+                            self.http_service.send_code_to_plc(1)  # Out of dampers
+                        else:
+                            self.http_service.send_code_to_plc(0)  # Error
                         continue
+
+                    self.dampers = dampers
                 else:
                     self.slats = slats
             elif self.place_next:
@@ -274,7 +279,7 @@ class PickOrderLogic:
     def check_if_all_dampers_have_been_moved(self):
         for column in self.dampers:
             for damper in column:
-                if damper.moved is False:
+                if damper is not None and damper.moved is False:
                     return False
         return True
 

@@ -8,7 +8,6 @@ TEST = False
 # Set Values
 PIXEL_PER_MM = 2.2
 HALF_SCREEN = 320
-old_trigger = 99
 
 # PLC configuration
 TCP_IP = '192.168.0.1'  # IP address of the PLC
@@ -91,7 +90,6 @@ class RailCamera:
             self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
 
     def start_main_loop(self):
-        trigger = 0
         old_trigger = 0
 
         while True:
@@ -109,14 +107,12 @@ class RailCamera:
 
                     # Send trigger to PLC when the paste passes the camera
                     if old_trigger != 3:
-                        trigger = 3
                         old_trigger = 3
                         self.http_service.send_code_to_plc(3)
 
             else:
                 # Send reset trigger to PLC
                 if old_trigger == 3:
-                    trigger = 99
                     old_trigger = 99
 
             key = cv2.waitKey(1)
@@ -161,7 +157,7 @@ class RailCamera:
             cv2.drawContours(output_image, [contour], 0, (0, 0, 255), 2)
 
             # Select only big contours
-            if cv2.contourArea(contour) > 55000:
+            if cv2.contourArea(contour) > 30000:
 
                 # Draw a bounding rectangle and retreive position information
                 x, y, w, h = cv2.boundingRect(contour)
@@ -173,7 +169,7 @@ class RailCamera:
                     self.paste = Blob.Blob(h, w, x, y, centre_x, centre_y)
 
                 # Update object
-                elif abs(centre_x - self.paste.centre_x) < 10:
+                elif abs(centre_x - self.paste.centre_x) < 30:
                     self.paste.x = x
                     self.paste.y = y
                     self.paste.centre_x = centre_x

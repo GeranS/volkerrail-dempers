@@ -42,6 +42,7 @@ class HttpService:
         while True:
             print("Connecting to PLC...")
             try:
+                self.socket_plc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.socket_plc.connect((plc_client_ip, plc_client_port))
                 _thread.start_new_thread(self.listen_for_plc_messages, ())
                 break
@@ -51,11 +52,24 @@ class HttpService:
                 time.sleep(1)
 
     def send_code_to_plc(self, code):
+        if code == 3:
+            _thread.start_new_thread(self.send_delayed_code_to_plc, ())
+            return
+
         send_data = struct.pack(">h", code)
         print("message to PLC: " + str(code))
         self.socket_plc.send(send_data)
         send_data = struct.pack(">h", 99)
         self.socket_plc.send(send_data)
+
+    def send_delayed_code_to_plc(self):
+        time.sleep(2)
+        send_data = struct.pack(">h", 3)
+        print("message to PLC: " + str(3))
+        self.socket_plc.send(send_data)
+        send_data = struct.pack(">h", 99)
+        self.socket_plc.send(send_data)
+
 
     def send_move_command(self, robot_x, robot_y, robot_z, config):
         # for config, 0 means both sides, 1 means left, 2 means right
@@ -111,35 +125,38 @@ class HttpService:
                 break
 
             if not message:
+                print("Message is none.")
                 break
 
             if len(message) == 2:
                 code = int(struct.unpack(">h", message[0:2])[0])
 
-                print("message from plc: " + str(code))
+                #print("message from plc: " + str(code))
 
                 if code == 0:  # Start auto
-                    # Start auto mode
+                    print('Message from PLC: Start automatic mode.')
                     if self.robot_state.auto is False:
                         self.robot_state.start_automatic_mode()
 
                 elif code == 1:  # Move to safe
+                    print('Message from PLC: Move to safe.')
                     self.robot_state.paused = True
                     self.send_safe_command()
 
                 elif code == 2:  # Continue
+                    print('Message from PLC: Continue.')
                     self.robot_state.paused = False
 
                 elif code == 3:  # Place damper
-                    print('Placing damper...')
+                    print('Message from PLC: Place Damper.')
                     self.robot_state.place_next = True
 
                 elif code == 4:  # Emergency safe
-                    print('Stopping...')
+                    print('Message from PLC: Emergency Stop.')
                     self.send_stop_command()
 
                 elif code == 5:  # Shut down
-                    print('Shutting down...')
+                    print('Message from PLC: Shutdown.')
                     self.robot_state.shutdown()
                     sys.exit()
 
@@ -147,7 +164,10 @@ class HttpService:
                 # Show error message when the number of bytes is not 2
                 print("Received too little or too much bytes. 2 needed, received: ", len(message))
 
-        self.robot_socket.close()
+        print("Closing PLC socket")
+        self.socket_plc.close()
+
+        self.connect_to_plc()
 
     def listen_for_robot_messages(self):
         while True:

@@ -11,4 +11,7 @@ from PickOrderLogic import PickOrderLogic
 print("Starting...")
 logic = PickOrderLogic()
 
+#while True:
+#    a = 1
+
 logic.start_automatic_mode()
