@@ -63,7 +63,7 @@ class HttpService:
         self.socket_plc.send(send_data)
 
     def send_delayed_code_to_plc(self):
-        time.sleep(2)
+        time.sleep(7)
         send_data = struct.pack(">h", 3)
         print("message to PLC: " + str(3))
         self.socket_plc.send(send_data)
@@ -131,7 +131,7 @@ class HttpService:
             if len(message) == 2:
                 code = int(struct.unpack(">h", message[0:2])[0])
 
-                #print("message from plc: " + str(code))
+                print("message from plc: " + str(code))
 
                 if code == 0:  # Start auto
                     print('Message from PLC: Start automatic mode.')

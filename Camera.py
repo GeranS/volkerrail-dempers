@@ -3,6 +3,7 @@ from ConversionService import ConversionService
 import collections
 import cv2
 import numpy as np
+import os
 import pyrealsense2 as rs
 
 
@@ -121,8 +122,6 @@ class Camera:
         array_of_damper_locations = []
 
         for contour in contours:
-            area = cv2.contourArea(contour)
-
             m = cv2.moments(contour)
 
             # More accurate than the bounding box, especially for single damper pickups
@@ -151,16 +150,11 @@ class Camera:
                     print("skipped over blob because width")
                     continue
 
-                maximum_area_damper = self.conversion_service.convert_meters_to_pixels(max_length_damper, detection_z) \
-                                      * self.conversion_service.convert_meters_to_pixels(max_width_damper, detection_z)
-
                 maximum_amount_lengthwise = h_meters // min_length_damper
                 minimum_amount_lengthwise = h_meters // max_length_damper
 
                 maximum_amount_widthwise = w_meters // min_width_damper
-                minimum_amount_widthwise = w_meters // max_width_damper
 
-                # todo: take into account both min and max
                 amount_wide = maximum_amount_widthwise
                 amount_long = maximum_amount_lengthwise
 
@@ -205,9 +199,6 @@ class Camera:
                             width_counter += 1
                         length_counter += 1
 
-        #cv2.imshow('dempers', image)
-        #cv2.waitKey(1)
-
         if len(array_of_damper_locations) == 0:
             return None
 
@@ -226,17 +217,11 @@ class Camera:
 
         image[120:360, 120: 520] = image_middle
 
-        #cv2.imshow('dempers', image)
-        #cv2.waitKey(0)
-
         iterations = 10
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(image, kernel, iterations=iterations)
         kernel = np.ones((5, 5), np.uint8)
         dilation = cv2.dilate(erosion, kernel, iterations=iterations)
-
-        #cv2.imshow('dempers', dilation)
-        #cv2.waitKey(0)
 
         edged = cv2.Canny(dilation, 30, 200)
 
@@ -273,9 +258,6 @@ class Camera:
             y2 = y + h
 
             y_middle = int((y + y + h) / 2)
-
-        #cv2.imshow('dempers', dilation)
-        #cv2.waitKey(0)
 
         if x1 is None:
             return None
@@ -376,9 +358,6 @@ class Camera:
 
         for slat in slats:
             cv2.drawMarker(inverted, (slat.x, slat.y), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=2)
-
-        #cv2.imshow('dempers', inverted)
-        #cv2.waitKey(0)
 
         if int(counter - 1) != amount_of_slats_based_on_width and retry:
             print("Amount of slats found doesn't match expected amount, trying again.")

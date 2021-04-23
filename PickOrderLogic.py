@@ -129,100 +129,12 @@ class PickOrderLogic:
     # Mode for testing
     def start_testing_mode(self):
 
-        if self.auto:
-            return
-
-        cv2.namedWindow('dempers')
-
         while True:
-            key = cv2.waitKey(1)
+            detection_z, layer_z = self.camera.get_top_layer_image()
+            slats = self.camera.find_slats(layer_z)
 
-            # and self.busy is False
-            if key == ord('s'):
-                break
-
-        # Every iteration is one layer
-        while True:
-            self.http_service.send_picture_command()
-            self.busy = True
-
-            while self.busy:
-                time.sleep(0.5)
-
-            image, detection_z, layer_z = self.camera.get_top_layer_image()
-
-            if image is None or detection_z is None or layer_z is None:
-                blank_image = np.zeros(shape=[480, 640, 3], dtype=np.uint8)
-                cv2.putText(blank_image, "No dampers found, please check pallet.", (10, 40),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 255, 50))
-
-                while True:
-                    cv2.imshow('dempers', blank_image)
-                    key = cv2.waitKey(1)
-
-                    # and self.busy is False
-                    if key == ord('s'):
-                        break
-                continue
-
-            self.layer_z = layer_z
-
-            self.slats = self.camera.find_slats(self.layer_z)
-
-            if self.slats is not None:
-                self.remove_slats()
-
-                image, detection_z, self.layer_z = self.camera.get_top_layer_image()
-
-            self.dampers, original_image = self.camera.find_dampers(detection_z, self.layer_z)
-            image = original_image.copy()
-
-            while True:
-                if self.dampers is None:
-                    cv2.putText(original_image, "No dampers found, please check pallet.", (10, 40),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 255, 50))
-                    cv2.imshow('dempers', original_image)
-
-                    while True:
-                        key = cv2.waitKey(1)
-
-                        # and self.busy is False
-                        if key == ord('s'):
-                            break
-
-                    break
-
-                damper_count = 1
-
-                for row in self.dampers:
-                    for damper in row:
-                        if damper is not None:
-                            if damper.moved:
-                                cv2.putText(image, str(damper_count) + " moved", (damper.x, damper.y),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                            (255, 0, 0))
-                            else:
-                                cv2.putText(image, str(damper_count), (damper.x, damper.y),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                            (255, 0, 0))
-                            damper_count += 1
-
-                cv2.imshow('dempers', image)
-
-                while True:
-                    key = cv2.waitKey(1)
-
-                    # and self.busy is False
-                    if key == ord('s'):
-                        break
-
-                while self.busy:
-                    time.sleep(0.5)
-                    self.busy = True
-                layer_done = self.choose_next_pick()
-
-                if layer_done:
-                    break
+            if slats is None:
+                self.camera.find_dampers(detection_z, layer_z)
 
     # todo: Not necessarily anything wrong with this method in general, but it looks ugly; please fix.
     def choose_next_pick(self):
@@ -304,7 +216,7 @@ class PickOrderLogic:
                 x, y, z = slat.x, slat.y, slat.z
                 robot_x, robot_y, robot_z = self.conversion_service.convert_to_robot_coordinates(x, y, z)
 
-                robot_x = robot_x - 0.05
+                robot_x = robot_x - 0.045
 
                 while self.busy:
                     time.sleep(0.5)

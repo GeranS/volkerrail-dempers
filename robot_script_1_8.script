@@ -19,7 +19,7 @@ socket = socket_open(ip, port, socket_name)
 
 #Set poses
 pose_above_belt = pose_add(p[0.663, 0.390, 0.2, 0, 0, 0], hoeknaarAA(90))
-pose_on_belt_right = pose_add(p[0.663, 0.535, 0.125, 0, 0, 0], hoeknaarAA(90))
+pose_on_belt_right = pose_add(p[0.663, 0.533, 0.125, 0, 0, 0], hoeknaarAA(90))
 pose_on_belt_left = pose_add(p[0.663, 0.390, 0.125, 0, 0, 0], hoeknaarAA(90))
 pose_safe = pose_add(p[0.556, -0.157, 0.337, 0, 0, 0], hoeknaarAA(90))
 pose_picture = pose_add(p[0.663, 0.396, 0.400, 0, 0, 0], hoeknaarAA(90))
